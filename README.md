@@ -16,7 +16,28 @@ Here we provide:
 - A expand-region plugin for Lisp editing in LispWorks Editor, similar with [expand-region.el](https://github.com/magnars/expand-region.el) ([expand-region.lisp](./expand-region.lisp))
 - A simple pair-editing facility like Emacs's electric-pair-mode, with just enough of functions ([pair.lisp](./pair.lisp))
 
+### Usage
+
+Basically, just simply load any file you want to include. Some plugins
+has specific requirement for delivery (like
+[editor-markdown](editor-markdown.lisp)). For details, please visit
+each source file and read the top comment lines of them.
+
+Here's a sample code to load all of them into your LispWorks IDE. We
+assume that you clone this repo into `~/common-lisp/lw-plugins`:
+
+```lisp
+(dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
+  (compile-file file :load t))
+```
+
 ----------------
+
+### Acknowledgements
+
+Thanks to the LispWorks Ltd. to provide us the exellent product.
+
+Thanks my another identity, May, who helps and supports me.
 
 Supporting Neurodiversity & Transgender & Plurality!
 
