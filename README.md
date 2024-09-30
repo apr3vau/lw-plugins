@@ -22,6 +22,7 @@ Supporting Neurodiversity & Transgender & Plurality!
 
 🏳️‍🌈🏳️‍⚧️
 
+----------------
 
 ### Screenshots
 
