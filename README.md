@@ -26,7 +26,7 @@ each source file and read the top comment lines of them.
 Here's a sample code to load all of them into your LispWorks IDE. We
 assume that you clone this repo into `~/common-lisp/lw-plugins`:
 
-```lisp
+```common-lisp
 (dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
   (compile-file file :load t))
 ```
