@@ -16,6 +16,13 @@ Here we provide:
 - A expand-region plugin for Lisp editing in LispWorks Editor, similar with [expand-region.el](https://github.com/magnars/expand-region.el) ([expand-region.lisp](./expand-region.lisp))
 - A simple pair-editing facility like Emacs's electric-pair-mode, with just enough of functions ([pair.lisp](./pair.lisp))
 
+----------------
+
+Supporting Neurodiversity & Transgender & Plurality!
+
+🏳️‍🌈🏳️‍⚧️
+
+
 ### Screenshots
 
 #### Flex completion
@@ -26,8 +33,3 @@ Here we provide:
 
 ![Markdown](./images/markdown.png)
 
-------------------
-
-Supporting Neurodiversity & Transgender & Plurality!
-
-🏳️‍🌈🏳️‍⚧️
