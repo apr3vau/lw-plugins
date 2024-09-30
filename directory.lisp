@@ -1,5 +1,18 @@
+;; Copyright (c) 2024, April & May
+;; SPDX-License-Identifier: 0BSD
+
+;; Enhancement & complement of the Directory Mode. Makes it more similar with Emacs's Dired
+
+;; Features:
+;;     Command for keys: ^, +, U, L, B, C, R, w, ~, #
+;;     Complement for edge cases (like in commands C & R)
+;;     Some bugfix
+;;
+;; Dependency: UIOP
+
 (in-package editor)
 
+;; For older version LW you may need custom here...
 (require "uiop")
 
 (defun directory-mode-delete-deleted-lines-files (buffer)
@@ -12,6 +25,7 @@
            (let* ((name (string-directory-mode-filename string))
                   (full-pathname (merge-pathnames name directory)))
              (if (file-directory-p full-pathname)
+                 ;; Makes it able to delete directory
                  (when (confirm-it (format nil "Delete directory ~A and its content?" full-pathname))
                    (uiop:delete-directory-tree (truename full-pathname) :validate t)
                    (incf count))
@@ -131,9 +145,9 @@
            (let* ((name (string-directory-mode-filename string))
                   (from (merge-pathnames name directory))
                   (to (merge-pathnames name target-directory)))
-             (block nil
-               (if (and (probe-file to)
-                        (confirm-it (format nil "~A exists, replace it?" to))))
+             ;; Add file-exist check here
+             (when (or (not (probe-file to))
+                       (confirm-it (format nil "~A exists, replace it?" to)))
                (if copy-p
                    (copy-file from to)
                  (rename-file from to))
@@ -144,6 +158,8 @@
 
 (defun directory-mode-do-move-or-copy-files (buffer copy-p)
   (let ((want-count (directory-mode-count-marked-lines buffer)))
+    ;; The original function wrongly use PROMPT-FOR-DIRECTORY and will raise error
+    ;; Fix this bug by replacing a correct one
     (when-let (target-direcory (prompt-for-directory :prompt (format nil "select target directory for ~a the ~d marked files: "
                                                                      (if copy-p "copying" "moving") want-count)))
       (let ((count (directory-mode-move-or-copy-marked-lines-files buffer target-direcory copy-p)))
@@ -151,6 +167,30 @@
         (message "~a ~d files to ~a"
                  (if copy-p "copied" "moved") count target-direcory)))))
 
+;; The special verify-func used by our own copy / rename commands,
+;; Accept both directory or file.
+(defun directory-mode-move-or-copy-file-prompt-verify (string parse-inf)
+  (declare (type parse-inf parse-inf))
+  (when (and (stringp string) (= (length string) 0))
+    (let ((me (parse-inf-must-exist parse-inf)))
+      (unless (eq me t)
+        (return-from directory-mode-move-or-copy-file-prompt-verify
+          (values nil (if me "Illegal input : empty string" t))))))
+  (let ((pn (if (pathnamep string)
+                string
+              (or (pathname-or-lose (relevant-pathname-end string))
+                  (let ((sys::*twiddle-active* nil))
+                    (pathname-or-lose (relevant-pathname-end string)))))))
+    (when pn
+      (cond ((wild-pathname-p pn)
+             (message "~a has a wildcard in it" pn)
+             nil)
+	    ((not (eq (parse-inf-must-exist parse-inf) t)) pn)
+	    (t nil)))))
+
+;; Features we add:
+;;     Support bulk-rename marked files;
+;;     Allow input of both new directory or new name
 (defcommand "Directory Mode Rename" (p)
      "Prompt for a new name and rename the file in the current line."
      "Prompt for a new name and rename the file in the current line."
@@ -164,12 +204,29 @@
                   (new (prompt-for-file :default dir
                                         :directory :output
                                         :must-exist nil
-                                        :prompt (format nil "Rename ~a to: " name))))
-        (let ((old (merge-pathnames name dir)))
-          (when (rename-file old new)
-            (revert-buffer-command nil)
-            (message "renamed ~a to ~a" name new)))))))
+                                        :prompt (format nil "Rename ~a to: " name)
+                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
+        (block nil
+          (let ((old (merge-pathnames name dir)))
+            (unless (or (pathname-name new) (pathname-type new))
+              (if (probe-file new)
+                  (when (file-directory-p old)
+                    (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
+                        (uiop:delete-directory-tree new :validate t)
+                      (return)))
+                (unless (file-directory-p old)
+                  (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
+                      (ensure-directories-exist new)
+                    (return))))
+              (unless (file-directory-p old)
+                (setf new (merge-pathnames (file-namestring old) new))))
+            (when (rename-file old new)
+              (revert-buffer-command nil)
+              (message "renamed ~a to ~a" name new))))))))
 
+;; Features we add:
+;;     Support copy only current-line's file when nothing marked
+;;     Allow input of both new directory or new name
 (defcommand "Directory Mode Copy Marked" (p)
      "Copy the files that are marked to another directory"
      "Copy the files that are marked to another directory"
@@ -183,11 +240,25 @@
                   (new (prompt-for-file :default dir
                                         :directory :output
                                         :must-exist nil
-                                        :prompt (format nil "Copy ~a to: " name))))
-        (let ((old (merge-pathnames name dir)))
-          (when (copy-file old new)
-            (revert-buffer-command nil)
-            (message "Copied ~a to ~a" name new)))))))
+                                        :prompt (format nil "Copy ~a to: " name)
+                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
+        (block nil
+          (let ((old (merge-pathnames name dir)))
+            (unless (or (pathname-name new) (pathname-type new))
+              (if (probe-file new)
+                  (when (file-directory-p old)
+                    (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
+                        (uiop:delete-directory-tree new :validate t)
+                      (return)))
+                (unless (file-directory-p old)
+                  (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
+                      (ensure-directories-exist new)
+                    (return))))
+              (unless (file-directory-p old)
+                (setf new (merge-pathnames (file-namestring old) new))))
+            (when (copy-file old new)
+              (revert-buffer-command nil)
+              (message "Copied ~a to ~a" name new))))))))
 
 (bind-key "Directory Mode Up Directory" "^" :mode "Directory")
 (bind-key "Directory Mode Unmark All Marks" "U" :mode "Directory")

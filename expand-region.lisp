@@ -1,5 +1,13 @@
-;;; Copyright (c) 2024, April Simone
-;;; SPDX-License-Identifier: BSD-2-Clause
+;; Copyright (c) 2024, April & May
+;; SPDX-License-Identifier: 0BSD
+
+;; I love Emacs's expand-region plugin, so I implement my own in
+;; LispWorks. It's currently only available for Lisp, unable to
+;; decrease selections, and will mark the whole symbol for minimum
+;; range.
+
+;; Usage: Load this file, The "Expand Region" command will
+;; automatically bind to C-=.
 
 (in-package editor)
 

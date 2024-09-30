@@ -1,9 +1,18 @@
-;;; Copyright (c) 2024, April Simone
-;;; SPDX-License-Identifier: BSD-2-Clause
+;; Copyright (c) 2024, April & May
+;; SPDX-License-Identifier: 0BSD
+
+;; We make a simplify version of electric-pair-mode here. For paired
+;; characters in *PAIRS*, inserting the left one will automatically
+;; append the right one, deleting the left one will also automatically
+;; delete the right one if the right one is straightly following.
+
+;; Support Unicode characters.
+
+;; Usage: Load this file. Reload is needed if you modified *PAIRS* afterwards.
 
 (in-package editor)
 
-(defparameter *pairs*
+(defvar *pairs*
   '((#\( #\))
     (#\" #\")
     (#\[ #\])
@@ -12,7 +21,6 @@
     ))
 
 ;; Insertion
-
 (loop for (1st 2nd) in *pairs*
       for command-name = (format nil "Insert ~A ~A For Selection" (char-code 1st) (char-code 2nd))
       do (eval `(defcommand ,command-name (p)
@@ -22,8 +30,8 @@
 
 ;; Deletion
 (defcommand "Delete Previous Character With Paren" (p)
-     ""
-     ""
+     "Delete the right one of the pair if the right one is straightly following."
+     "Delete the right one of the pair if the right one is straightly following."
   (loop with point = (current-point)
         repeat (or p 1)
         for pair = (assoc (character-at point -1) *pairs*)
