@@ -1,4 +1,4 @@
-## LispWorks Plugins by April & May
+# LispWorks Plugins by April & May
 
 Here's the LispWorks Plugins created by April & May. All plugins are
 tested under the LispWorks 8.0.1 Windows & Macintosh, safe for
@@ -16,7 +16,7 @@ Here we provide:
 - A expand-region plugin for Lisp editing in LispWorks Editor, similar with [expand-region.el](https://github.com/magnars/expand-region.el) ([expand-region.lisp](./expand-region.lisp))
 - A simple pair-editing facility like Emacs's electric-pair-mode, with just enough of functions ([pair.lisp](./pair.lisp))
 
-### Usage
+## Usage
 
 Basically, just simply load any file you want to include. Some plugins
 has specific requirement for delivery (like
@@ -33,7 +33,7 @@ assume that you clone this repo into `~/common-lisp/lw-plugins`:
 
 ----------------
 
-### Acknowledgements
+## Acknowledgements
 
 Thanks to the LispWorks Ltd. to provide us the exellent product.
 
@@ -45,13 +45,13 @@ Supporting Neurodiversity & Transgender & Plurality!
 
 ----------------
 
-### Screenshots
+## Screenshots
 
-#### Flex completion
+### Flex completion
 
 ![Flex completion](./images/completion.png)
 
-#### Markdown
+### Markdown
 
 ![Markdown](./images/markdown.png)
 
