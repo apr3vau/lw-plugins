@@ -7,13 +7,31 @@
 ;;     Command for keys: ^, +, U, L, B, C, R, w, ~, #
 ;;     Complement for edge cases (like in commands C & R)
 ;;     Some bugfix
-;;
-;; Dependency: UIOP
 
 (in-package editor)
 
-;; For older version LW you may need custom here...
-(require "uiop")
+(defun delete-directory-tree (dir)
+  "Recursively delete directory and its contents."
+  #+lispworks7+
+  (fast-directory-files
+   dir
+   (lambda (name handle)
+     (let ((fullname (string-append (fdf-handle-directory-string handle)
+                                    name)))
+       (if (fdf-handle-directory-p handle)
+           (delete-directory-tree fullname)
+         (handler-case (delete-file fullname t)
+           (error (e) (editor-error "Cannot delete file: ~A" fullname)))))))
+  #-lispworks7+
+  (dolist (file (directory (make-pathname :name :wild :type :wild
+                                          :defaults (truename dir))))
+    (if (file-directory-p file)
+        (delete-directory-tree file)
+      (handler-case (delete-file fullname t)
+        (error (e) (editor-error "Cannot delete file: ~A" fullname)))))
+  
+  (handler-case (delete-directory dir t)
+    (error (e) (editor-error "Cannot delete directory: ~A" dir))))
 
 (defun directory-mode-delete-deleted-lines-files (buffer)
   (let ((directory (directory-mode-buffer-directory buffer))
@@ -27,12 +45,65 @@
              (if (file-directory-p full-pathname)
                  ;; Makes it able to delete directory
                  (when (confirm-it (format nil "Delete directory ~A and its content?" full-pathname))
-                   (uiop:delete-directory-tree (truename full-pathname) :validate t)
+                   (delete-directory-tree (truename full-pathname))
                    (incf count))
                (when (delete-file full-pathname nil)
                  (incf count)))
              :delete-current-line))))
     count))
+
+(defun directory-mode-move-or-copy-marked-lines-files (buffer target-directory copy-p)
+  (let ((directory (directory-mode-buffer-directory buffer))
+        (count 0))
+    (directory-mode-map-lines-modifying
+     buffer
+     #'(lambda (string)
+         (when (string-directory-mode-marked-p string)
+           (let* ((name (string-directory-mode-filename string))
+                  (from (merge-pathnames name directory))
+                  (to (merge-pathnames name target-directory)))
+             ;; Add file-exist check here
+             (when (or (not (probe-file to))
+                       (confirm-it (format nil "~A exists, replace it?" to)))
+               (if copy-p
+                   (copy-file from to)
+                 (rename-file from to))
+               (incf count)
+               (unless copy-p
+                 :delete-current-line))))))
+    count))
+
+(defun directory-mode-do-move-or-copy-files (buffer copy-p)
+  (let ((want-count (directory-mode-count-marked-lines buffer)))
+    ;; The original function wrongly use PROMPT-FOR-DIRECTORY and will raise error
+    ;; Fix this bug by replacing a correct one
+    (when-let (target-direcory (prompt-for-directory :prompt (format nil "select target directory for ~a the ~d marked files: "
+                                                                     (if copy-p "copying" "moving") want-count)))
+      (let ((count (directory-mode-move-or-copy-marked-lines-files buffer target-direcory copy-p)))
+        (unless (or copy-p (zerop count)) (clear-undo buffer))
+        (message "~a ~d files to ~a"
+                 (if copy-p "copied" "moved") count target-direcory)))))
+
+;; The special verify-func used by our own copy / rename commands,
+;; Accept both directory or file.
+(defun directory-mode-move-or-copy-file-prompt-verify (string parse-inf)
+  (declare (type parse-inf parse-inf))
+  (when (and (stringp string) (= (length string) 0))
+    (let ((me (parse-inf-must-exist parse-inf)))
+      (unless (eq me t)
+        (return-from directory-mode-move-or-copy-file-prompt-verify
+          (values nil (if me "Illegal input : empty string" t))))))
+  (let ((pn (if (pathnamep string)
+                string
+              (or (pathname-or-lose (relevant-pathname-end string))
+                  (let ((sys::*twiddle-active* nil))
+                    (pathname-or-lose (relevant-pathname-end string)))))))
+    (when pn
+      (cond ((wild-pathname-p pn)
+             (message "~a has a wildcard in it" pn)
+             nil)
+	    ((not (eq (parse-inf-must-exist parse-inf) t)) pn)
+	    (t nil)))))
 
 (defcommand "Directory Mode Up Directory" (p)
      "" ""
@@ -135,59 +206,6 @@
    'point-directory-mode-set-delete
    t))
 
-(defun directory-mode-move-or-copy-marked-lines-files (buffer target-directory copy-p)
-  (let ((directory (directory-mode-buffer-directory buffer))
-        (count 0))
-    (directory-mode-map-lines-modifying
-     buffer
-     #'(lambda (string)
-         (when (string-directory-mode-marked-p string)
-           (let* ((name (string-directory-mode-filename string))
-                  (from (merge-pathnames name directory))
-                  (to (merge-pathnames name target-directory)))
-             ;; Add file-exist check here
-             (when (or (not (probe-file to))
-                       (confirm-it (format nil "~A exists, replace it?" to)))
-               (if copy-p
-                   (copy-file from to)
-                 (rename-file from to))
-               (incf count)
-               (unless copy-p
-                 :delete-current-line))))))
-    count))
-
-(defun directory-mode-do-move-or-copy-files (buffer copy-p)
-  (let ((want-count (directory-mode-count-marked-lines buffer)))
-    ;; The original function wrongly use PROMPT-FOR-DIRECTORY and will raise error
-    ;; Fix this bug by replacing a correct one
-    (when-let (target-direcory (prompt-for-directory :prompt (format nil "select target directory for ~a the ~d marked files: "
-                                                                     (if copy-p "copying" "moving") want-count)))
-      (let ((count (directory-mode-move-or-copy-marked-lines-files buffer target-direcory copy-p)))
-        (unless (or copy-p (zerop count)) (clear-undo buffer))
-        (message "~a ~d files to ~a"
-                 (if copy-p "copied" "moved") count target-direcory)))))
-
-;; The special verify-func used by our own copy / rename commands,
-;; Accept both directory or file.
-(defun directory-mode-move-or-copy-file-prompt-verify (string parse-inf)
-  (declare (type parse-inf parse-inf))
-  (when (and (stringp string) (= (length string) 0))
-    (let ((me (parse-inf-must-exist parse-inf)))
-      (unless (eq me t)
-        (return-from directory-mode-move-or-copy-file-prompt-verify
-          (values nil (if me "Illegal input : empty string" t))))))
-  (let ((pn (if (pathnamep string)
-                string
-              (or (pathname-or-lose (relevant-pathname-end string))
-                  (let ((sys::*twiddle-active* nil))
-                    (pathname-or-lose (relevant-pathname-end string)))))))
-    (when pn
-      (cond ((wild-pathname-p pn)
-             (message "~a has a wildcard in it" pn)
-             nil)
-	    ((not (eq (parse-inf-must-exist parse-inf) t)) pn)
-	    (t nil)))))
-
 ;; Features we add:
 ;;     Support bulk-rename marked files;
 ;;     Allow input of both new directory or new name
@@ -212,7 +230,7 @@
               (if (probe-file new)
                   (when (file-directory-p old)
                     (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
-                        (uiop:delete-directory-tree new :validate t)
+                        (delete-directory-tree new)
                       (return)))
                 (unless (file-directory-p old)
                   (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
@@ -248,7 +266,7 @@
               (if (probe-file new)
                   (when (file-directory-p old)
                     (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
-                        (uiop:delete-directory-tree new :validate t)
+                        (delete-directory-tree new)
                       (return)))
                 (unless (file-directory-p old)
                   (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))

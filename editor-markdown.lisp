@@ -26,18 +26,18 @@
 
 ;; Font family & size
 
-(defparameter *sans-serif-font-family-name*
-  #+windows "Arial"
+(defvar *sans-serif-font-family-name*
+  #+mswindows "Arial"
   #+macosx ".AppleSystemUIFont"
   #+linux "Liberation Sans")
 
-(defparameter *monospace-font-family-name*
-  #+windows "Courier New"
+(defvar *monospace-font-family-name*
+  #+mswindows "Courier New"
   #+macosx "Monaco"
   #+linux "Liberation Mono")
 
-(defparameter *font-size* 12)
-(defparameter *header-font-size-increasement* 2)
+(defvar *font-size* 12)
+(defvar *header-font-size-increasement* 2)
 
 ;; Face
 
@@ -77,7 +77,7 @@ change of font family or size to adapt the change."
                     :background (editor::create-dark-background-switchable-color :lightcyan2 #(:RGB 0 0.2 0))
                     :if-exists :overwrite)
   (editor:make-face 'md-thematic-break-face
-                    :background (editor::create-dark-background-switchable-color :grey60 :grey38)
+                    :background (editor::create-dark-background-switchable-color :grey70 :grey38)
                     :if-exists :overwrite)
   (editor:make-face 'md-header-face
                     :font *header-font*
@@ -101,18 +101,19 @@ change of font family or size to adapt the change."
                     :if-exists :overwrite)
   (editor:make-face 'md-bold-face
                     :font *bold-font*
-                    :foreground (editor::create-dark-background-switchable-color :yellow3 :yellow1)
+                    :foreground (editor::create-dark-background-switchable-color :orchid :orchid1)
                     :if-exists :overwrite)
   (editor:make-face 'md-italic-face
                     :font *italic-font*
-                    :foreground (editor::create-dark-background-switchable-color :yellow3 :yellow1)
+                    :foreground (editor::create-dark-background-switchable-color :orchid :orchid1)
                     :if-exists :overwrite)
   (editor:make-face 'md-bold-italic-face
                     :font *bold-italic-font*
-                    :foreground (editor::create-dark-background-switchable-color :yellow3 :yellow1)
+                    :foreground (editor::create-dark-background-switchable-color :orchid :orchid1)
                     :if-exists :overwrite)
   (editor:make-face 'md-strikethrough-face
                     :font *strikethrough-font*
+                    :foreground (editor::create-dark-background-switchable-color :gray20 :gray80)
                     :background (editor::create-dark-background-switchable-color :gray80 :gray20)
                     :if-exists :overwrite)
   (editor:make-face 'md-code-span-face
@@ -388,7 +389,7 @@ that belong to this block."
                                                    (push i codes)
                                                  (incf paragraph-lines)))
                   ((line-quotes-p line) (progn
-                                          (setq paragraph-lines 0
+                                          (setq paragraph-lines 1
                                                 paragraph-under-quote t)
                                           (push i quotes)))
                   ((line-empty-p line) (setq paragraph-lines 0
@@ -419,105 +420,113 @@ that contain the inline-component."
         image-opening link-title-opening link-title-closing link-dest-opening
         pointy-opening
         (i 0))
-    (loop (let ((char (char text i)))
-            (case char
-              (#\\ (incf i))
-              (#\` (let ((len (identical-char-length text i)))
-                     (case len
-                       (1 (if single-code-span-opening
-                              (progn
-                                (push (list single-code-span-opening (1+ i)) code-spans)
-                                (setq single-code-span-opening nil))
-                            (setq single-code-span-opening i)))
-                       (2 (if double-code-span-opening
-                              (progn
-                                (push (list double-code-span-opening (+ 2 i)) code-spans)
-                                (setq double-code-span-opening nil))
-                            (setq double-code-span-opening i))))
-                     (incf i (1- len))))
-              (#\~ (let ((len (identical-char-length text i)))
-                     (case len
-                       (1 (if single-strikethrough-opening
-                              (progn
-                                (push (list single-strikethrough-opening (1+ i)) strikethroughs)
-                                (setq single-strikethrough-opening nil))
-                            (setq single-strikethrough-opening i)))
-                       (2 (if double-code-span-opening
-                              (progn
-                                (push (list double-strikethrough-opening (+ 2 i)) strikethroughs)
-                                (setq double-strikethrough-opening nil))
-                            (setq double-strikethrough-opening i))))
-                     (incf i (1- len))))
-              (#\* (let ((len (identical-char-length text i)))
-                     (case len
-                       (1 (if *-italic-opening
-                              (progn
-                                (push (list *-italic-opening (1+ i)) italics)
-                                (setq *-italic-opening nil))
-                            (setq *-italic-opening i)))
-                       (2 (if *-bold-opening
-                              (progn
-                                (push (list *-bold-opening (+ 2 i)) bolds)
-                                (setq *-bold-opening nil))
-                            (setq *-bold-opening i)))
-                       (3 (if *-bold-italic-opening
-                              (progn
-                                (push (list *-bold-italic-opening (+ 3 i)) bold-italics)
-                                (setq *-bold-italic-opening nil))
-                            (setq *-bold-italic-opening i))))
-                     (incf i (1- len))))
-              (#\_ (let ((len (identical-char-length text i)))
-                     (case len
-                       (1 (if _-italic-opening
-                              (progn
-                                (push (list _-italic-opening (1+ i)) italics)
-                                (setq _-italic-opening nil))
-                            (setq _-italic-opening i)))
-                       (2 (if _-bold-opening
-                              (progn
-                                (push (list _-bold-opening (+ 2 i)) bolds)
-                                (setq _-bold-opening nil))
-                            (setq _-bold-opening i)))
-                       (3 (if _-bold-italic-opening
-                              (progn
-                                (push (list _-bold-italic-opening (+ 3 i)) bold-italics)
-                                (setq _-bold-italic-opening nil))
-                            (setq _-bold-italic-opening i))))
-                     (incf i (1- len))))
-              (#\[ (setq link-title-opening i)
-                   (if (and (> i 0)
-                            (eql (char text (1- i)) #\!))
-                       (setq image-opening (1- i))
-                     (setq image-opening nil)))
-              (#\] (when link-title-opening
-                     (unless (and (< i (1- (length text)))
-                                  (eql (char text (1+ i)) #\())
-                       (if image-opening
-                           (push (list image-opening (1+ i)) images)
-                         (push (list link-title-opening (1+ i)) links)))
-                     (setq link-title-closing i)))
-              (#\< (setq pointy-opening i))
-              (#\> (when pointy-opening
-                     (unless link-dest-opening
-                       (push (list pointy-opening (1+ i)) links)))
-                   (setq pointy-opening nil))
-              (#\( (unless pointy-opening
-                     (when (eql link-title-closing (1- i))
-                       (setq link-title-closing nil
-                             link-dest-opening i))))
-              (#\) (unless pointy-opening
-                     (when link-dest-opening
-                       (when link-title-opening
+    (when (> (length text) 0)
+      (loop (let ((char (char text i)))
+              (case char
+                (#\\ (incf i))
+                (#\` (let ((len (identical-char-length text i)))
+                       (case len
+                         (1 (if single-code-span-opening
+                                (progn
+                                  (push (list single-code-span-opening (1+ i)) code-spans)
+                                  (setq single-code-span-opening nil))
+                              (setq single-code-span-opening i)))
+                         (2 (if double-code-span-opening
+                                (progn
+                                  (push (list double-code-span-opening (+ 2 i)) code-spans)
+                                  (setq double-code-span-opening nil))
+                              (setq double-code-span-opening i))))
+                       (incf i (1- len))))
+                (#\~ (let ((len (identical-char-length text i)))
+                       (case len
+                         (1 (if single-strikethrough-opening
+                                (progn
+                                  (push (list single-strikethrough-opening (1+ i)) strikethroughs)
+                                  (setq single-strikethrough-opening nil))
+                              (setq single-strikethrough-opening i)))
+                         (2 (if double-code-span-opening
+                                (progn
+                                  (push (list double-strikethrough-opening (+ 2 i)) strikethroughs)
+                                  (setq double-strikethrough-opening nil))
+                              (setq double-strikethrough-opening i))))
+                       (incf i (1- len))))
+                (#\* (let ((len (identical-char-length text i)))
+                       (case len
+                         (1 (if *-italic-opening
+                                (progn
+                                  (push (list *-italic-opening (1+ i)) italics)
+                                  (setq *-italic-opening nil))
+                              (setq *-italic-opening i)))
+                         (2 (if *-bold-opening
+                                (progn
+                                  (push (list *-bold-opening (+ 2 i)) bolds)
+                                  (setq *-bold-opening nil))
+                              (setq *-bold-opening i)))
+                         (3 (if *-bold-italic-opening
+                                (progn
+                                  (push (list *-bold-italic-opening (+ 3 i)) bold-italics)
+                                  (setq *-bold-italic-opening nil))
+                              (setq *-bold-italic-opening i))))
+                       (incf i (1- len))))
+                (#\_ (let ((len (identical-char-length text i)))
+                       (case len
+                         (1 (if _-italic-opening
+                                (progn
+                                  (push (list _-italic-opening (1+ i)) italics)
+                                  (setq _-italic-opening nil))
+                              (setq _-italic-opening i)))
+                         (2 (if _-bold-opening
+                                (progn
+                                  (push (list _-bold-opening (+ 2 i)) bolds)
+                                  (setq _-bold-opening nil))
+                              (setq _-bold-opening i)))
+                         (3 (if _-bold-italic-opening
+                                (progn
+                                  (push (list _-bold-italic-opening (+ 3 i)) bold-italics)
+                                  (setq _-bold-italic-opening nil))
+                              (setq _-bold-italic-opening i))))
+                       (incf i (1- len))))
+                (#\[ (setq link-title-opening i)
+                     (if (and (> i 0)
+                              (eql (char text (1- i)) #\!))
+                         (setq image-opening (1- i))
+                       (setq image-opening nil)))
+                (#\] (when link-title-opening
+                       (unless (and (< i (1- (length text)))
+                                    (eql (char text (1+ i)) #\())
                          (if image-opening
+                             (push (list image-opening (1+ i)) images)
+                           (push (list link-title-opening (1+ i)) links)))
+                       (setq link-title-closing i)))
+                (#\< (setq pointy-opening i))
+                (#\> (when pointy-opening
+                       (unless link-dest-opening
+                         (push (list pointy-opening (1+ i)) links)))
+                     (setq pointy-opening nil))
+                (#\( (unless pointy-opening
+                       (when (eql link-title-closing (1- i))
+                         (setq link-title-closing nil
+                               link-dest-opening i))))
+                (#\) (unless pointy-opening
+                       (when link-dest-opening
+                         (when link-title-opening
+                           (if image-opening
+                               (progn
+                                 (push (list image-opening (1+ i)) images))
                              (progn
-                               (push (list image-opening (1+ i)) images))
-                           (progn
-                             (push (list link-title-opening (1+ i)) links)))
-                         (setq image-opening nil
-                               link-title-opening nil
-                               link-dest-opening nil)))))))
-          (incf i)
-          (when (= i (length text)) (return)))
+                               (push (list link-title-opening (1+ i)) links)))
+                           (setq image-opening nil
+                                 link-title-opening nil
+                                 link-dest-opening nil)))))
+                ((or #\Return #\Newline)
+                 (setq single-code-span-opening nil double-code-span-opening nil
+                       single-strikethrough-opening nil double-strikethrough-opening nil
+                       *-italic-opening nil *-bold-opening nil *-bold-italic-opening nil
+                       _-italic-opening nil _-bold-opening nil _-bold-italic-opening nil
+                       image-opening nil link-title-opening nil link-title-closing nil
+                       link-dest-opening nil pointy-opening nil))))
+            (incf i)
+            (when (= i (length text)) (return))))
     (list :code-spans code-spans :strikethroughs strikethroughs
           :bolds      bolds      :italics        italics        :bold-italics bold-italics
           :images     images     :links          links)))
@@ -553,7 +562,7 @@ that contain the inline-component."
            (pos (editor:point-position start))
            (result (search-inlines str)))
       (loop for key in '(:code-spans :strikethroughs :bolds :italics :bold-italics :images :links)
-            for face in '(md-code-face md-strikethrough-face md-bold-face md-italic-face md-bold-italic-face md-image-face md-link-face)
+            for face in '(md-code-span-face md-strikethrough-face md-bold-face md-italic-face md-bold-italic-face md-image-face md-link-face)
             do (loop for (pos-start pos-end) in (getf result key)
                      do (setf (editor:point-position s) (+ pos pos-start)
                               (editor:point-position e) (+ pos pos-end))
@@ -600,7 +609,6 @@ that contain the inline-component."
           *font-size*
           *header-font-size-increasement*
           md-link-face
-          md-code-face
           md-bold-face
           md-list-face
           md-quote-face

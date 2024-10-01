@@ -1,11 +1,12 @@
 # LispWorks Plugins by April & May
 
 Here's the LispWorks Plugins created by April & May. All plugins are
-tested under the LispWorks 8.0.1 Windows & Macintosh, safe for
-delivery, and have been used for a long time in my own. All the codes
-are licensed under [0BSD](https://spdx.org/licenses/0BSD.html)),
-allowing any kind of usage without any limitation. Feel free to
-include any part of them in your own product.
+zero-dependency, tested under the LispWorks 8.0.1 Windows & Macintosh,
+safe for delivery, and have been used for a long time in my own. All
+the codes are licensed under
+[0BSD](https://spdx.org/licenses/0BSD.html)), allowing any kind of
+usage without any limitation. Feel free to include any part of them in
+your own product.
 
 Here we provide:
 
