@@ -5,11 +5,12 @@
 
 ;; Features:
 ;;     Command for keys: ^, +, U, L, B, C, R, w, ~, #
-;;     Complement for edge cases (like in commands C & R)
-;;     Some bugfix
+;;     Complement for edge cases (like in commands C & R), Make them DWIM
+;;     Bugfix
 
 (in-package editor)
 
+;; 01Oct24: Implement this function in our own, to get rid of any dependency
 (defun delete-directory-tree (dir)
   "Recursively delete directory and its contents."
   #+lispworks7+
@@ -33,7 +34,23 @@
   (handler-case (delete-directory dir t)
     (error (e) (editor-error "Cannot delete directory: ~A" dir))))
 
-(defun directory-mode-delete-deleted-lines-files (buffer)
+;; The special verify-func used by our copy / rename commands,
+;; Allowing both directory or file, only check wildcards.
+(defun directory-mode-move-or-copy-file-prompt-verify (string parse-inf)
+  (declare (ignore parse-inf))
+  (if (and (stringp string) (= (length string) 0))
+      (values nil "Illegal input : empty string")
+    (when-let (pn (if (pathnamep string) string
+                    (pathname-or-lose (relevant-pathname-end string))))
+      (if (wild-pathname-p pn)
+          (progn (message "~a has a wildcard in it" pn)
+            nil)
+        pn))))
+
+;; Editor functions advicing
+;; 01Oct24: Use advice instead of arbitrary redefinition
+
+(defadvice (directory-mode-delete-deleted-lines-files lw-plugins :around) (buffer)
   (let ((directory (directory-mode-buffer-directory buffer))
         (count 0))
     (directory-mode-map-lines-modifying
@@ -44,7 +61,7 @@
                   (full-pathname (merge-pathnames name directory)))
              (if (file-directory-p full-pathname)
                  ;; Makes it able to delete directory
-                 (when (confirm-it (format nil "Delete directory ~A and its content?" full-pathname))
+                 (when (confirm-it (format nil "Recursively delete ~A?" full-pathname))
                    (delete-directory-tree (truename full-pathname))
                    (incf count))
                (when (delete-file full-pathname nil)
@@ -52,7 +69,8 @@
              :delete-current-line))))
     count))
 
-(defun directory-mode-move-or-copy-marked-lines-files (buffer target-directory copy-p)
+(defadvice (directory-mode-move-or-copy-marked-lines-files lw-plugins :around)
+    (buffer target-directory copy-p)
   (let ((directory (directory-mode-buffer-directory buffer))
         (count 0))
     (directory-mode-map-lines-modifying
@@ -73,7 +91,7 @@
                  :delete-current-line))))))
     count))
 
-(defun directory-mode-do-move-or-copy-files (buffer copy-p)
+(defadvice (directory-mode-do-move-or-copy-files lw-plugins :around) (buffer copy-p)
   (let ((want-count (directory-mode-count-marked-lines buffer)))
     ;; The original function wrongly use PROMPT-FOR-DIRECTORY and will raise error
     ;; Fix this bug by replacing a correct one
@@ -84,29 +102,11 @@
         (message "~a ~d files to ~a"
                  (if copy-p "copied" "moved") count target-direcory)))))
 
-;; The special verify-func used by our own copy / rename commands,
-;; Accept both directory or file.
-(defun directory-mode-move-or-copy-file-prompt-verify (string parse-inf)
-  (declare (type parse-inf parse-inf))
-  (when (and (stringp string) (= (length string) 0))
-    (let ((me (parse-inf-must-exist parse-inf)))
-      (unless (eq me t)
-        (return-from directory-mode-move-or-copy-file-prompt-verify
-          (values nil (if me "Illegal input : empty string" t))))))
-  (let ((pn (if (pathnamep string)
-                string
-              (or (pathname-or-lose (relevant-pathname-end string))
-                  (let ((sys::*twiddle-active* nil))
-                    (pathname-or-lose (relevant-pathname-end string)))))))
-    (when pn
-      (cond ((wild-pathname-p pn)
-             (message "~a has a wildcard in it" pn)
-             nil)
-	    ((not (eq (parse-inf-must-exist parse-inf) t)) pn)
-	    (t nil)))))
+;; Commands
 
 (defcommand "Directory Mode Up Directory" (p)
-     "" ""
+     "Visit the parent directory using Directory Mode."
+     "Visit the parent directory using Directory Mode."
   (loop repeat (or p 1)
         do (list-directory-command
             nil (truename
@@ -114,33 +114,79 @@
                                   (directory-mode-buffer-directory (current-buffer)))))))
 
 (defcommand "Directory Mode Unmark All Marks" (p)
-     "" ""
+     "Unmark all marked file in current Directory Mode buffer."
+     "Unmark all marked file in current Directory Mode buffer."
   (declare (ignore p))
   (directory-mode-command-set-all-marked nil))
 
+;; 01Oct24: Add support for loading / compiling marked files
 (defcommand "Directory Mode Do Load" (p)
-     "" ""
+     "Load the target file(s)."
+     "Load the target file(s)."
   (declare (ignore p))
-  (let ((path (merge-pathnames (directory-mode-point-filename (current-point))
-                              (directory-mode-buffer-directory (current-buffer)))))
-    (handler-case
-        (when (load (truename path))
-          (message "~A has been loaded." (file-namestring path)))
-      (error (e) (editor-error e)))
-    ))
+  (let* ((point (current-point))
+         (buffer (point-buffer point))
+         (dir (directory-mode-buffer-directory buffer))
+         (count (directory-mode-count-marked-lines buffer)))
+    (if (> count 0)
+        (directory-mode-map-lines
+         buffer
+         (lambda (string)
+           (when (string-directory-mode-marked-p string)
+             (let ((path (merge-pathnames (string-directory-mode-filename string) dir)))
+               (handler-case (load (truename path))
+                 (error (e) (editor-error "Cannot load ~A: ~A" (file-namestring path) e)))))))
+      (let ((path (merge-pathnames (directory-mode-point-filename point) dir)))
+        (handler-case
+            (when (load (truename path))
+              (message "~A has been loaded." (file-namestring path)))
+          (error (e) (editor-error "Cannot load ~A: ~A" (file-namestring path) e)))))))
 
+;; 01Oct24: Ask FASL destination before compile; Support compile in-memory
 (defcommand "Directory Mode Do Compile" (p)
-     "" ""
-  (declare (ignore p))
-  (let ((path (merge-pathnames (directory-mode-point-filename (current-point))
-                               (directory-mode-buffer-directory (current-buffer)))))
-    (handler-case
-        (message "~A has been compiled to ~A" (file-namestring path)
-                 (file-namestring (compile-file (truename path) :load t)))
-      (error (e) (editor-error e)))))
+     "Compile the target files. Call with prefix argument to compile it in-memory and load."
+     "Compile the target files. Call with prefix argument to compile it in-memory and load."
+  (let* ((point (current-point))
+         (buffer (point-buffer point))
+         (dir (directory-mode-buffer-directory buffer))
+         (count (directory-mode-count-marked-lines buffer)))
+    (if (> count 0)
+        (let ((output (unless p
+                        (prompt-for-file :prompt "select target directory for FASL files: "
+                                         :default dir
+                                         :must-exist nil
+                                         :file-directory-p t))))
+          (directory-mode-map-lines
+           buffer
+           (lambda (string)
+             (when (string-directory-mode-marked-p string)
+               (let* ((name (string-directory-mode-filename string))
+                      (path (merge-pathnames name dir)))
+                 (multiple-value-bind (out warnings-p error-p)
+                     (apply #'compile-file (truename path)
+                            (if p (list :in-memory t :load t)
+                              (list :output-file output)))
+                   (declare (ignore out warnings-p))
+                   (when error-p (editor-error (format nil "Error while compile ~A."))))))))
+          (if p (message "~A files have been compiled in memory and loaded." count)
+            (message "~A files have been compiled to ~A." count output)))
+      (let* ((name (directory-mode-point-filename point))
+             (path (merge-pathnames name dir))
+             (output (unless p
+                       (prompt-for-file :prompt (format nil "Compile ~A to: " name)
+                                        :must-exist nil
+                                        :default dir
+                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify))))
+        (multiple-value-bind (out warnings-p error-p)
+            (compile-file (truename path) :output-file output)
+          (declare (ignore warnings-p))
+          (if error-p (editor-error "Error while compile ~A." name)
+            (if p (message "~A has been compiled in memory and loaded." name)
+              (message "~A has been compiled to ~A." name out))))))))
 
 (defcommand "Directory Mode Create Directory" (p)
-     "" ""
+     "Create a directory in current directory."
+     "Create a directory in current directory."
   (declare (ignore p))
   (let ((path (prompt-for-file :prompt "Create Directory: "
                                :default (directory-mode-buffer-directory (current-buffer))
@@ -156,7 +202,12 @@
         (revert-buffer-command nil)))))
 
 (defcommand "Directory Mode Copy Filename" (p)
-     "" ""
+     "Copy marked files' name. The names are separated by a space.
+
+With a prefix argument P, copy next P lines files' name."
+     "Copy marked files' name. The names are separated by a space.
+
+With a prefix argument P, copy next P lines files' name."
   (let* ((point (current-point))
          (buffer (point-buffer point))
          (dir (directory-mode-buffer-directory buffer)))
@@ -177,7 +228,8 @@
           (save-kill-text nil (namestring (merge-pathnames (directory-mode-point-filename point) dir))))))))
 
 (defcommand "Directory Mode Flag Backup Files" (p)
-     "" ""
+     "Flag all backup files (name end up with '~') for deletion."
+     "Flag all backup files (name end up with '~') for deletion."
   (declare (ignore p))
   (directory-mode-command-check-and-set-flag
    (lambda (point)
@@ -187,7 +239,8 @@
    t))
 
 (defcommand "Directory Mode Flag Auto Save Files" (p)
-     "" ""
+     "Flag all auto-save files (name around with '#') for deletion."
+     "Flag all auto-save files (nams around with '#') for deletion."
   (declare (ignore p))
   (directory-mode-command-check-and-set-flag
    (lambda (point)
@@ -197,12 +250,13 @@
    t))
 
 (defcommand "Directory Mode Flag FASL Files" (p)
-     "" ""
+     "Flag all FASL files for deletion."
+     "Flag all FASL files for deletion."
   (declare (ignore p))
   (directory-mode-command-check-and-set-flag
    (lambda (point)
      (when-let (type (pathname-type (directory-mode-point-filename point)))
-       (uiop:string-suffix-p type "fasl")))
+       (string-equal type "fasl" :start1 (- (length type) 4))))
    'point-directory-mode-set-delete
    t))
 
@@ -289,4 +343,4 @@
 (bind-key "Directory Mode Flag Backup Files" "~" :mode "Directory")
 (bind-key "Directory Mode Flag Auto Save Files" "#" :mode "Directory")
 ;; My personal preference here :D
-(bind-key "Directory Mode Flag FASL Files" "." :mode "Directory")
+(bind-key "Directory Mode Flag FASL Files" #(#\% #\&) :mode "Directory")
