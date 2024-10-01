@@ -27,10 +27,13 @@ each source file and read the top comment lines of them.
 Here's a sample code to load all of them into your LispWorks IDE. We
 assume that you clone this repo into `~/common-lisp/lw-plugins`:
 
-```common-lisp
-(dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
-  (compile-file file :load t))
-```
+	(dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
+	  (compile-file file :load t))
+
+And we also provide an ASDF system file. You can load it using ASDF:
+
+	(require "asdf")
+	(asdf:load-system :lw-plugins)
 
 ----------------
 
@@ -38,7 +41,7 @@ assume that you clone this repo into `~/common-lisp/lw-plugins`:
 
 Thanks to the LispWorks Ltd. to provide us the exellent product.
 
-Thanks my another identity, May, who helps and supports me.
+Thanks my headmate, May, who helps and supports me.
 
 Supporting Neurodiversity & Transgender & Plurality!
 
