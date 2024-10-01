@@ -30,7 +30,7 @@ assume that you clone this repo into `~/common-lisp/lw-plugins`:
 	(dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
 	  (compile-file file :load t))
 
-And we also provide an ASDF system file. You can load it using ASDF:
+There's also an ASDF system file. You can load it using ASDF:
 
 	(require "asdf")
 	(asdf:load-system :lw-plugins)
