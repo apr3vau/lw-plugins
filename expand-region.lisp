@@ -11,39 +11,93 @@
 
 (in-package editor)
 
+;; 02Oct24: Refactored. Support expands to word, prefix and upper string
+(defun expand-region (start end)
+  "Core function of expand region.
+
+Giving two points (START END), moves the points to expanded position
+and returns them.
+
+The expansion criteria is determined by the position and inner string
+of the points, can be expanded to current word, current form, upper
+form, upper string, or the whole buffer."
+  (let ((str (points-to-string start end))
+        (prev-char (character-at start -1))
+        (next-char (character-at end 0)))
+    (cond ((or (and (point= start end)
+                    (or (alphanumericp prev-char)
+                        (alphanumericp next-char)))
+               (and (every #'alphanumericp str)
+                    (not (and (plusp (character-attribute :word-delimiter prev-char))
+                              (plusp (character-attribute :word-delimiter next-char))))))
+           ;; Expand to word
+           (if (zerop (character-attribute :word-delimiter next-char))
+               (progn
+                 (word-offset start 1)
+                 (word-offset start -1)
+                 (word-offset end 1))
+             (progn
+               (word-offset start -1)
+               (move-point end start)
+               (word-offset end 1))))
+          ((or (point= start end)
+               (and (every (lambda (c) (eq (character-attribute :lisp-syntax c) :constituent)) str)
+                (or (eq (character-attribute :lisp-syntax prev-char) :constituent)
+                    (eq (character-attribute :lisp-syntax next-char) :constituent))))
+           ;; Expand to form
+           (if (whitespace-char-p prev-char)
+               (progn
+                 (form-offset start 1 t 0 t)
+                 (form-offset start -1 t 0 t)
+                 (move-point end start)
+                 (form-offset end 1 t 0 t))
+             (progn
+               (form-offset start -1 t 0 t)
+               (move-point end start)
+               (form-offset end 1 t 0 t))))
+          ((eq (character-attribute :lisp-syntax prev-char) :prefix)
+           ;; Expand to prefix
+           (move-point start end)
+           (form-offset start -1)
+           (move-point end start)
+           (form-offset end 1))
+          (t (if-let (up (form-offset start -1 t 1 t))
+                 ;; Expand to Upper form
+                 (progn
+                   (move-point end start)
+                   (form-offset end 1))
+               (if-let (string-quote (loop for i downfrom -1
+                                           for char = (character-at start i)
+                                           until (null char)
+                                           when (eq (character-attribute :lisp-syntax char) :string-quote)
+                                             do (return i)))
+                   ;; Expand outside from string
+                   (progn
+                     (character-offset start string-quote)
+                     (move-point end start)
+                     (form-offset end 1))
+                 ;; Expand to the whole buffer
+                 (progn
+                   (buffer-start start)
+                   (buffer-end end))))))
+    (values start end)))
+
 (defcommand "Expand Region" (p)
-     ""
-     ""
+     "Expand the marking region.
+
+Sequentially expand to current word, current form, upper form, until
+the whole buffer, by involking the command repeatly or with a prefix
+argument."
+     "Expand the marking region.
+
+Sequentially expand to current word, current form, upper form, until
+the whole buffer, by involking the command repeatly or with a prefix
+argument."
   (loop repeat (or p 1)
         do (let ((region-p (buffer-region-highlighted-p (current-buffer))))
-             (with-point ((start (current-point))
-                                 (end (if region-p (current-mark) (current-point))))
-               (let* ((former-character-type (character-attribute :lisp-syntax (character-at start -1)))
-                      (latter-character-type (character-attribute :lisp-syntax (character-at end 0)))
-                      (region-constituent-p (and region-p
-                                                 (every (lambda (c)
-                                                          (eq (character-attribute :lisp-syntax c) :constituent))
-                                                        (points-to-string start end))))
-                      (symbol-not-covered (and region-constituent-p
-                                               (or (eq former-character-type :constituent)
-                                                   (eq latter-character-type :constituent)))))
-                 (cond
-                  ;; Start point move to previous form's start
-                  ((and (not region-p)
-                        (not (member former-character-type '(:space :newline)))
-                        (member latter-character-type '(:space :newline)))
-                   (form-offset start -1))
-                  ;; Start point move to current form's start
-                  ((or (not region-p) symbol-not-covered)
-                   (form-offset start 1)
-                   (form-offset start -1))
-                  ;; Start point move to upper form's start
-                  (t
-                   (form-offset start -1 t 1 t)))
-                 (move-point end start)
-                 (form-offset end 1)
-                 (move-point (current-point) start)
-                 (set-current-mark end)
-                 (set-highlight-buffer-region t))))))
+             (with-point ((end (if region-p (current-mark) (current-point))))
+               (expand-region (current-point) end)
+               (set-current-mark end)
+               (set-highlight-buffer-region t)))))
 
 (bind-key "Expand Region" "Control-=" :global)
