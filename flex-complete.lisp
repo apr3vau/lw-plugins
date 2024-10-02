@@ -69,32 +69,33 @@ TARGET in the SOURCE. Otherwise return NIL."
         result)
     ;; Determine packages to search
     (case (length split)
+      ;; No colon: current package's internals + other packages' (except KEYWORD) externals
       (1 (setq internal-packages (list current-package)
                external-packages (set-difference (list-all-packages) (list (find-package "KEYWORD") current-package))))
-      (2 (setq internal-packages (list current-package)
-               external-packages (remove current-package (list-all-packages))))
+      ;; One colon: All packages' externals
+      (2 (setq external-packages (list-all-packages)))
+      ;; Two colons: Only matched package's internals
       (3 (setq internal-packages (loop with name = (string-upcase (car split))
                                        for package in (list-all-packages)
                                        when (flex-complete-fuzzy-search name (package-name package))
-                                         collect package)
-               external-packages nil)))
+                                         collect package))))
     ;; Searching
-    (loop for pak in external-packages
-          do (loop for sym being each external-symbol of pak
-                   for string = (let ((*package* current-package)
-                                      (*print-case* case))
-                                  (prin1-to-string sym))
-                   when (eq (symbol-package sym) pak)
-                     do (when-let (starts (flex-complete-fuzzy-search str string))
-                          (push (cons sym starts) result))))
-    (loop for pak in internal-packages
-          do (loop for sym being each present-symbol of pak
-                   for string = (let ((*package* current-package)
-                                      (*print-case* case))
-                                  (prin1-to-string sym))
-                   for starts = (flex-complete-fuzzy-search str string)
-                   when starts
-                     do (push (cons sym starts) result)))
+    (dolist (package external-packages)
+      (loop for sym being each external-symbol of package
+            for string = (let ((*package* current-package)
+                               (*print-case* case))
+                           (prin1-to-string sym))
+            when (eq (symbol-package sym) package)
+              do (when-let (starts (flex-complete-fuzzy-search str string))
+                   (push (cons sym starts) result))))
+    (dolist (package internal-packages)
+      (loop for sym being each present-symbol of package
+            for string = (let ((*package* current-package)
+                               (*print-case* case))
+                           (prin1-to-string sym))
+            for starts = (flex-complete-fuzzy-search str string)
+            when starts
+              do (push (cons sym starts) result)))
     ;; Sort results according to "density" of matched characters
     (sort result
           #'(lambda (list1 list2)
