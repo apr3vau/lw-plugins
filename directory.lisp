@@ -47,6 +47,22 @@
             nil)
         pn))))
 
+;; 02Oct24: Able to load ASDF system using Directory Mode Do Load.
+(defun directory-mode-do-load-file (path)
+  "Load file at PATH. Assume the PATH is a TRUENAME.
+
+If given file is an ASDF system definition file, load the file and
+then load each system being defined in this file."
+  (if (string-equal (pathname-type path) "asd")
+      (progn
+        (load path :package "ASDF")
+        (asdf:map-systems
+         (lambda (system)
+           (when (equal (asdf:system-source-file system) path)
+             (asdf:load-system system))))
+        t)
+    (load path)))
+
 ;; Editor functions advicing
 ;; 01Oct24: Use advice instead of arbitrary redefinition
 
@@ -134,11 +150,11 @@
          (lambda (string)
            (when (string-directory-mode-marked-p string)
              (let ((path (merge-pathnames (string-directory-mode-filename string) dir)))
-               (handler-case (load (truename path))
+               (handler-case (directory-mode-do-load-file (truename path))
                  (error (e) (editor-error "Cannot load ~A: ~A" (file-namestring path) e)))))))
       (let ((path (merge-pathnames (directory-mode-point-filename point) dir)))
         (handler-case
-            (when (load (truename path))
+            (when (directory-mode-do-load-file (truename path))
               (message "~A has been loaded." (file-namestring path)))
           (error (e) (editor-error "Cannot load ~A: ~A" (file-namestring path) e)))))))
 
