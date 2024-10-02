@@ -10,7 +10,7 @@ your own product.
 
 Here we provide:
 
-- A Sly-style flexible fuzzy-matching in-place code completion for LispWorks Editor ([flex-complete.lisp](./editor-markdown.lisp))
+- A Sly-style flexible fuzzy-matching in-place code completion for LispWorks Editor ([flex-complete.lisp](./flex-complete.lisp))
 - A decent syntax highlight method of Markdown for LispWorks Editor ([editor-markdown.lisp](./editor-markdown.lisp))
 - A decent & elaborate syntax highlight method of Lisp for LispWorks Editor ([colourful.lisp](./colourful.lisp))
 - A enhancing / bugfixing / edge-case completing plugin for LispWorks Directory Mode, make it more similar with Emacs's dired ([directory.lisp](./directory.lisp))
