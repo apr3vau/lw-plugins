@@ -272,7 +272,8 @@ With a prefix argument P, copy next P lines files' name."
   (directory-mode-command-check-and-set-flag
    (lambda (point)
      (when-let (type (pathname-type (directory-mode-point-filename point)))
-       (string-equal type "fasl" :start1 (- (length type) 4))))
+       (and (>= (length type) 4)
+            (string-equal type "fasl" :start1 (- (length type) 4)))))
    'point-directory-mode-set-delete
    t))
 
