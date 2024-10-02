@@ -3,6 +3,7 @@
 
 (defsystem lw-plugins
   :author "April & May"
+  :license "0BSD"
   :components ((:file "colourful")
                (:file "flex-complete")
                (:file "directory")
