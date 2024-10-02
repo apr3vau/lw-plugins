@@ -167,9 +167,9 @@ fuzzy package-name completion."
      :print-function (if *flex-complete-enable-indicator-p*
                          (lambda (x)
                            (let ((*package* package)
-                                 (*print-case* *default-completion-case*))
+                                 (*print-case* *default-completion-case*)) 
                              (format nil "[~A~A~A] ~A"
-                                     (or (and (find-class x nil) "Ｃ")
+                                     (or (and (find-class x nil) "Ｃ") 
                                          (and (ignore-errors (subtypep x t)) "Ｔ")
                                          (and (find-package x) "Ｐ")
                                          "　")

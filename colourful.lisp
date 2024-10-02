@@ -46,6 +46,10 @@
                   :bold-p t
                   :foreground (editor::create-dark-background-switchable-color :blue :lightblue)
                   :if-exists :overwrite)
+;; 02Oct24: Fix variable face definition
+(editor:make-face 'font-lock-variable-name-face
+                  :foreground (editor::create-dark-background-switchable-color :darkgoldenrod :lightgoldenrod)
+                  :if-exists :overwrite)
 (editor:make-face 'font-lock-keyword-face
                   :bold-p t
                   :foreground (editor::create-dark-background-switchable-color :purple :light-red)

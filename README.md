@@ -51,9 +51,9 @@ Supporting Neurodiversity & Transgender & Plurality!
 
 ## Screenshots
 
-### Flex completion
+### Flex completion & Colourful highlight
 
-![Flex completion](./images/completion.png)
+![Flex completion](./images/completion-and-colourful.png)
 
 ### Markdown
 
