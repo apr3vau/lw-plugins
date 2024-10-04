@@ -51,7 +51,8 @@ form, upper string, or the whole buffer."
            ;; using :NOT-PREFIX T will cause the point move wrongly.
            ;; The feature of expanding to prefix will be commented
            ;; until the bug being fixed.
-           (if (whitespace-char-p prev-char)
+           (if (or (whitespace-char-p prev-char)
+                   (eq (character-attribute :lisp-syntax prev-char) :prefix))
                (progn
                  (form-offset start 1)
                  (form-offset start -1)
