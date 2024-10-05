@@ -24,13 +24,13 @@ form, upper string, or the whole buffer."
   (let ((str (points-to-string start end))
         (prev-char (character-at start -1))
         (next-char (character-at end 0)))
+    ;; Expand to word
     (cond ((or (and (point= start end)
                     (or (and prev-char (alphanumericp prev-char))
                         (and next-char (alphanumericp next-char))))
                (and (every #'alphanumericp str)
                     (not (and (plusp (character-attribute :word-delimiter prev-char))
                               (plusp (character-attribute :word-delimiter next-char))))))
-           ;; Expand to word
            (if (zerop (character-attribute :word-delimiter next-char))
                (progn
                  (word-offset start 1)
@@ -40,17 +40,11 @@ form, upper string, or the whole buffer."
                (word-offset start -1)
                (move-point end start)
                (word-offset end 1))))
+          ;; Expand to form
           ((or (point= start end)
                (and (every (lambda (c) (eq (character-attribute :lisp-syntax c) :constituent)) str)
                     (or (eq (character-attribute :lisp-syntax prev-char) :constituent)
                         (eq (character-attribute :lisp-syntax next-char) :constituent))))
-           ;; Expand to form
-           
-           ;; 04Oct24: Due to a bug of FORM-OFFSET, traverse throught
-           ;; a list which has sub-list with #\' or #\` prefixing
-           ;; using :NOT-PREFIX T will cause the point move wrongly.
-           ;; The feature of expanding to prefix will be commented
-           ;; until the bug being fixed.
            (if (or (whitespace-char-p prev-char)
                    (eq (character-attribute :lisp-syntax prev-char) :prefix))
                (progn
@@ -62,23 +56,34 @@ form, upper string, or the whole buffer."
                (form-offset start -1)
                (move-point end start)
                (form-offset end 1))))
+          ;; Expand to prefix
+          ;; 04Oct24: Due to a bug of FORM-OFFSET, traverse throught
+          ;; a list which has sub-list with #\' or #\` prefixing
+          ;; using :NOT-PREFIX T will cause the point move wrongly.
+          ;; The feature of expanding to prefix will be commented
+          ;; until the bug being fixed.
           #|((eq (character-attribute :lisp-syntax prev-char) :prefix)
-           ;; Expand to prefix
            (move-point start end)
            (form-offset start -1)
            (move-point end start)
            (form-offset end 1))|#
+          
+          ;; Expand to current list's content
+          ((or (form-offset start -1)
+               (form-offset end 1))
+           (loop while (form-offset start -1))
+           (loop while (form-offset end 1)))
+          ;; Expand to Upper form
           (t (if-let (up (form-offset start -1 t 1 t))
-                 ;; Expand to Upper form
                  (progn
                    (move-point end start)
                    (form-offset end 1))
+               ;; Expand outside from string
                (if-let (string-quote (loop for i downfrom -1
                                            for char = (character-at start i)
                                            until (null char)
                                            when (eq (character-attribute :lisp-syntax char) :string-quote)
                                              do (return i)))
-                   ;; Expand outside from string
                    (progn
                      (character-offset start string-quote)
                      (move-point end start)
