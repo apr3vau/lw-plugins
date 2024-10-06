@@ -10,6 +10,10 @@
 
 (in-package editor)
 
+;; 07Oct24: Allow Directory Mode to print human-readable sizes for
+;; files. The behavior can be controlled by this variable.
+(defvar *directory-mode-print-human-readable-size* t)
+
 ;; 01Oct24: Implement this function in our own, to get rid of any dependency
 (defun delete-directory-tree (dir)
   "Recursively delete directory and its contents."
@@ -65,6 +69,30 @@ then load each system being defined in this file."
 
 ;; Editor functions advicing
 ;; 01Oct24: Use advice instead of arbitrary redefinition
+
+(defadvice (insert-directory-mode-string-size-pairs lw-plugins :around) (point string-size-pairs)
+  (if *directory-mode-print-human-readable-size*
+      (dotimes (index (fill-pointer string-size-pairs))
+        (let ((pair (aref string-size-pairs index)))
+          (flet ((print-size (num)
+                   (cond ((< num 1024)
+                          (format nil "~dB" num))
+                         ((< num 1048576)
+                          (format nil "~,1fK" (/ num 1048576)))
+                         ((< num 1073741824)
+                          (format nil "~,1fM" (/ num 1073741824)))
+                         (t (format nil "~,1fG" (/ num 1099511627776))))))
+            (let ((string (format nil "~7<~;~A~> ~A~%" (print-size (cdr pair)) (car pair))))
+              (insert-things point *directory-mode-prefix* string))))
+        (call-next-advice point string-size-pairs))))
+
+;; Replace this function to a more rigorous one
+(defadvice (string-directory-mode-name-index lw-plugins :around) (string)
+  (when (string-directory-mode-proper-p string)
+    (let ((string (string-right-trim '(#\Space #\Newline #\Return) string)))
+      (loop for i downfrom (1- (length string))
+            until (whitespace-char-p (char string i))
+            finally (return (1+ i))))))
 
 (defadvice (directory-mode-delete-deleted-lines-files lw-plugins :around) (buffer)
   (let ((directory (directory-mode-buffer-directory buffer))
