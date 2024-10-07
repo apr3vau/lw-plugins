@@ -30,10 +30,13 @@ human-readable form in Directory Mode, just like `ls -h'.")
 (defun delete-directory-tree (dir)
   "Recursively delete directory and its contents."
   (let* ((truename (truename dir))
-         (files (directory (make-pathname :name :wild :type :wild
-                                          :directory (append (pathname-directory truename) (list :wild-inferiors))
-                                          :defaults truename)
-                           :directories t :link-transparency nil)))
+         (files (sort (directory (make-pathname :name :wild :type :wild
+                                                :directory (append (pathname-directory truename) (list :wild-inferiors))
+                                                :defaults truename)
+                                 :directories t :link-transparency nil)
+                      (lambda (p1 p2)
+                        (> (length (pathname-directory p1))
+                           (length (pathname-directory p2)))))))
     (flet ((dir-p (file) (not (or (stringp (pathname-name file))
                                   (stringp (pathname-type file))))))
       (map nil (lambda (file) (unless (dir-p file) (delete-file file))) files)
