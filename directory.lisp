@@ -97,8 +97,8 @@ then load each system being defined in this file."
                           (format nil "~,1fM" (/ num 1073741824)))
                          (t (format nil "~,1fG" (/ num 1099511627776))))))
             (let ((string (format nil "~7<~;~A~> ~A~%" (print-size (cdr pair)) (car pair))))
-              (insert-things point *directory-mode-prefix* string))))
-        (call-next-advice point string-size-pairs))))
+              (insert-things point *directory-mode-prefix* string)))))
+    (call-next-advice point string-size-pairs)))
 
 ;; For kill when opening:
 
