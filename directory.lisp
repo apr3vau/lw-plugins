@@ -5,14 +5,26 @@
 
 ;; Features:
 ;;     Command for keys: ^, +, U, L, B, C, R, w, ~, #
+;;     Supporting Kill-when-Opening
+;;     Supporting print file size in human-readable form
 ;;     Complement for edge cases (like in commands C & R), Make them DWIM
 ;;     Bugfix
 
 (in-package editor)
 
+;; 07Oct24: Similar with dired-kill-when-opening-new-dired-buffer
+(defvar *directory-mode-kill-when-opening-new-dired-buffer* nil
+  "If this option is T, kill the old Directory Mode
+buffer when opening new one.")
+
 ;; 07Oct24: Allow Directory Mode to print human-readable sizes for
 ;; files. The behavior can be controlled by this variable.
-(defvar *directory-mode-print-human-readable-size* t)
+(defvar *directory-mode-print-human-readable-size* t
+  "If this option is T, print the file size in
+human-readable form in Directory Mode, just like `ls -h'.")
+
+(export '(*directory-mode-kill-when-opening-new-dired-buffer*
+          *directory-mode-print-human-readable-size*))
 
 ;; 01Oct24: Implement this function in our own, to get rid of any dependency
 (defun delete-directory-tree (dir)
@@ -70,6 +82,8 @@ then load each system being defined in this file."
 ;; Editor functions advicing
 ;; 01Oct24: Use advice instead of arbitrary redefinition
 
+;; For human-readable size:
+
 (defadvice (insert-directory-mode-string-size-pairs lw-plugins :around) (point string-size-pairs)
   (if *directory-mode-print-human-readable-size*
       (dotimes (index (fill-pointer string-size-pairs))
@@ -86,13 +100,33 @@ then load each system being defined in this file."
               (insert-things point *directory-mode-prefix* string))))
         (call-next-advice point string-size-pairs))))
 
-;; Replace this function to a more rigorous one
-(defadvice (string-directory-mode-name-index lw-plugins :around) (string)
-  (when (string-directory-mode-proper-p string)
-    (let ((string (string-right-trim '(#\Space #\Newline #\Return) string)))
-      (loop for i downfrom (1- (length string))
-            until (whitespace-char-p (char string i))
-            finally (return (1+ i))))))
+;; For kill when opening:
+
+(defadvice (internal-directory-mode-edit-file lw-plugins :after) (p other-window)
+  (declare (ignore p other-window))
+  (when *directory-mode-kill-when-opening-new-dired-buffer*
+    (dolist (buf *buffer-list*)
+      (when (and (not (eq buf (current-buffer)))
+                 (string= (buffer-major-mode-name buf) "Directory"))
+        (kill-buffer-no-confirm buf)))))
+
+(defadvice (directory-mode-new-buffer-with-filter lw-plugins :around) (from-buffer filter)
+  (declare (ignore from-buffer filter))
+  (when *directory-mode-kill-when-opening-new-dired-buffer*
+    (dolist (buf *buffer-list*)
+      (when (and (not (eq buf (current-buffer)))
+                 (string= (buffer-major-mode-name buf) "Directory"))
+        (kill-buffer-no-confirm buf)))))
+
+(defadvice (list-directory-command lw-plugins :after) (p &optional directory)
+  (declare (ignore p directory))
+  (when *directory-mode-kill-when-opening-new-dired-buffer*
+    (dolist (buffer *buffer-list*)
+      (when (and (not (eq buffer (current-buffer)))
+                 (string= (buffer-major-mode-name buffer) "Directory"))
+        (kill-buffer-no-confirm buffer)))))
+
+;; Misc
 
 (defadvice (directory-mode-delete-deleted-lines-files lw-plugins :around) (buffer)
   (let ((directory (directory-mode-buffer-directory buffer))
@@ -146,7 +180,78 @@ then load each system being defined in this file."
         (message "~a ~d files to ~a"
                  (if copy-p "copied" "moved") count target-direcory)))))
 
-;; Commands
+;; 07Oct24: Advicing instead of redefining
+;; Features we add:
+;;     Support bulk-rename marked files;
+;;     Allow input of both new directory or new name
+(defadvice (directory-mode-rename-command lw-plugins :around) (p)
+  (declare (ignore p))
+  (let* ((point (current-point))
+         (buffer (point-buffer point))
+         (dir (directory-mode-buffer-directory buffer)))
+    (if (> (directory-mode-count-marked-lines buffer) 0)
+        (directory-mode-do-move-or-copy-files buffer nil)
+      (when-let* ((name (directory-mode-point-filename point))
+                  (new (prompt-for-file :default dir
+                                        :directory :output
+                                        :must-exist nil
+                                        :prompt (format nil "Rename ~a to: " name)
+                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
+        (block nil
+          (let ((old (merge-pathnames name dir)))
+            (unless (or (pathname-name new) (pathname-type new))
+              (if (probe-file new)
+                  (when (file-directory-p old)
+                    (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
+                        (delete-directory-tree new)
+                      (return)))
+                (unless (file-directory-p old)
+                  (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
+                      (ensure-directories-exist new)
+                    (return))))
+              (unless (file-directory-p old)
+                (setf new (merge-pathnames (file-namestring old) new))))
+            (when (rename-file old new)
+              (revert-buffer-command nil)
+              (message "renamed ~a to ~a" name new))))))))
+
+;; Features we add:
+;;     Support copy only current-line's file when nothing marked
+;;     Allow input of both new directory or new name
+(defadvice (directory-mode-copy-marked-command lw-plugins :around) (p)
+     "Copy the files that are marked to another directory"
+     "Copy the files that are marked to another directory"
+  (declare (ignore p))
+  (let* ((point (current-point))
+         (buffer (point-buffer point))
+         (dir (directory-mode-buffer-directory buffer)))
+    (if (> (directory-mode-count-marked-lines buffer) 0)
+        (directory-mode-do-move-or-copy-files buffer t)
+      (when-let* ((name (directory-mode-point-filename point))
+                  (new (prompt-for-file :default dir
+                                        :directory :output
+                                        :must-exist nil
+                                        :prompt (format nil "Copy ~a to: " name)
+                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
+        (block nil
+          (let ((old (merge-pathnames name dir)))
+            (unless (or (pathname-name new) (pathname-type new))
+              (if (probe-file new)
+                  (when (file-directory-p old)
+                    (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
+                        (delete-directory-tree new)
+                      (return)))
+                (unless (file-directory-p old)
+                  (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
+                      (ensure-directories-exist new)
+                    (return))))
+              (unless (file-directory-p old)
+                (setf new (merge-pathnames (file-namestring old) new))))
+            (when (copy-file old new)
+              (revert-buffer-command nil)
+              (message "Copied ~a to ~a" name new))))))))
+
+;; New Commands
 
 (defcommand "Directory Mode Up Directory" (p)
      "Visit the parent directory using Directory Mode."
@@ -305,77 +410,7 @@ With a prefix argument P, copy next P lines files' name."
    'point-directory-mode-set-delete
    t))
 
-;; Features we add:
-;;     Support bulk-rename marked files;
-;;     Allow input of both new directory or new name
-(defcommand "Directory Mode Rename" (p)
-     "Prompt for a new name and rename the file in the current line."
-     "Prompt for a new name and rename the file in the current line."
-  (declare (ignore p))
-  (let* ((point (current-point))
-         (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer)))
-    (if (> (directory-mode-count-marked-lines buffer) 0)
-        (directory-mode-do-move-or-copy-files buffer nil)
-      (when-let* ((name (directory-mode-point-filename point))
-                  (new (prompt-for-file :default dir
-                                        :directory :output
-                                        :must-exist nil
-                                        :prompt (format nil "Rename ~a to: " name)
-                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
-        (block nil
-          (let ((old (merge-pathnames name dir)))
-            (unless (or (pathname-name new) (pathname-type new))
-              (if (probe-file new)
-                  (when (file-directory-p old)
-                    (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
-                        (delete-directory-tree new)
-                      (return)))
-                (unless (file-directory-p old)
-                  (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
-                      (ensure-directories-exist new)
-                    (return))))
-              (unless (file-directory-p old)
-                (setf new (merge-pathnames (file-namestring old) new))))
-            (when (rename-file old new)
-              (revert-buffer-command nil)
-              (message "renamed ~a to ~a" name new))))))))
-
-;; Features we add:
-;;     Support copy only current-line's file when nothing marked
-;;     Allow input of both new directory or new name
-(defcommand "Directory Mode Copy Marked" (p)
-     "Copy the files that are marked to another directory"
-     "Copy the files that are marked to another directory"
-  (declare (ignore p))
-  (let* ((point (current-point))
-         (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer)))
-    (if (> (directory-mode-count-marked-lines buffer) 0)
-        (directory-mode-do-move-or-copy-files buffer t)
-      (when-let* ((name (directory-mode-point-filename point))
-                  (new (prompt-for-file :default dir
-                                        :directory :output
-                                        :must-exist nil
-                                        :prompt (format nil "Copy ~a to: " name)
-                                        :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
-        (block nil
-          (let ((old (merge-pathnames name dir)))
-            (unless (or (pathname-name new) (pathname-type new))
-              (if (probe-file new)
-                  (when (file-directory-p old)
-                    (if (prompt-for-y-or-n :prompt (format nil "Directory ~A exists.  Overwrite it anyway?" new))
-                        (delete-directory-tree new)
-                      (return)))
-                (unless (file-directory-p old)
-                  (if (prompt-for-y-or-n :prompt (format nil "Directory ~A does not exist.  Create it?" new))
-                      (ensure-directories-exist new)
-                    (return))))
-              (unless (file-directory-p old)
-                (setf new (merge-pathnames (file-namestring old) new))))
-            (when (copy-file old new)
-              (revert-buffer-command nil)
-              (message "Copied ~a to ~a" name new))))))))
+;; Bindings
 
 (bind-key "Directory Mode Up Directory" "^" :mode "Directory")
 (bind-key "Directory Mode Unmark All Marks" "U" :mode "Directory")
