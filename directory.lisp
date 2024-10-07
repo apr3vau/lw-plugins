@@ -29,26 +29,17 @@ human-readable form in Directory Mode, just like `ls -h'.")
 ;; 01Oct24: Implement this function in our own, to get rid of any dependency
 (defun delete-directory-tree (dir)
   "Recursively delete directory and its contents."
-  #+lispworks7+
-  (fast-directory-files
-   dir
-   (lambda (name handle)
-     (let ((fullname (string-append (fdf-handle-directory-string handle)
-                                    name)))
-       (if (fdf-handle-directory-p handle)
-           (delete-directory-tree fullname)
-         (handler-case (delete-file fullname t)
-           (error (e) (editor-error "Cannot delete file: ~A" fullname)))))))
-  #-lispworks7+
-  (dolist (file (directory (make-pathname :name :wild :type :wild
-                                          :defaults (truename dir))))
-    (if (file-directory-p file)
-        (delete-directory-tree file)
-      (handler-case (delete-file fullname t)
-        (error (e) (editor-error "Cannot delete file: ~A" fullname)))))
-  
-  (handler-case (delete-directory dir t)
-    (error (e) (editor-error "Cannot delete directory: ~A" dir))))
+  (let* ((truename (truename dir))
+         (files (directory (make-pathname :name :wild :type :wild
+                                          :directory (append (pathname-directory truename) (list :wild-inferiors))
+                                          :defaults truename)
+                           :directories t :link-transparency nil)))
+    (flet ((dir-p (file) (not (or (stringp (pathname-name file))
+                                  (stringp (pathname-type file))))))
+      (map nil (lambda (file) (unless (dir-p file) (delete-file file))) files)
+      (map nil (lambda (file) (when (dir-p file) (delete-directory file))) files))
+    (handler-case (delete-directory truename t)
+      (error (e) (editor-error "Cannot delete directory: ~A" truename)))))
 
 ;; The special verify-func used by our copy / rename commands,
 ;; Allowing both directory or file, only check wildcards.
@@ -104,7 +95,8 @@ then load each system being defined in this file."
 
 (defadvice (internal-directory-mode-edit-file lw-plugins :after) (p other-window)
   (declare (ignore p other-window))
-  (when *directory-mode-kill-when-opening-new-dired-buffer*
+  (when (and *directory-mode-kill-when-opening-new-dired-buffer*
+             (string= (buffer-major-mode-name (current-buffer)) "Directory"))
     (dolist (buf *buffer-list*)
       (when (and (not (eq buf (current-buffer)))
                  (string= (buffer-major-mode-name buf) "Directory"))
