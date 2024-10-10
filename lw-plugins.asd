@@ -10,3 +10,14 @@
                (:file "expand-region")
                (:file "editor-markdown")
                (:file "pair")))
+
+(defsystem lw-plugins/nerd-icons
+  :author "April & May"
+  :license "0BSD"
+  :components ((:file "nerd-icons/nerd-icons")))
+
+(defsystem lw-plugins/nerd-icons-directory
+  :author "April & May"
+  :license "0BSD"
+  :depends-on (lw-plugins/nerd-icons)
+  :components ((:file "nerd-icons/nerd-icons-directory")))
