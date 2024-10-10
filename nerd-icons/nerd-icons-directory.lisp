@@ -37,13 +37,15 @@
                 icon (third pair) color (fourth pair))
         (setq string (car pair) size (cdr pair)))
       (flet ((print-size (num)
+               (if (numberp num)
                    (cond ((< num 1024)
                           (format nil "~dB" num))
                          ((< num 1048576)
                           (format nil "~,1fK" (/ num 1024)))
                          ((< num 1073741824)
                           (format nil "~,1fM" (/ num 1048576)))
-                         (t (format nil "~,1fG" (/ num 1073741824))))))
+                         (t (format nil "~,1fG" (/ num 1073741824))))
+                 "")))
         (insert-buffer-string
          point
          (make-buffer-string
