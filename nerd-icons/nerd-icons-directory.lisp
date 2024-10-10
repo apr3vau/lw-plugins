@@ -31,6 +31,7 @@
 (defadvice (insert-directory-mode-string-size-pairs nerd-icons :around) (point string-size-pairs)
   (dotimes (index (fill-pointer string-size-pairs))
     (let ((pair (aref string-size-pairs index))
+          (pane (window-text-pane (current-window)))
           string size icon color)
       (if (listp (cdr pair))
           (setq string (first pair) size (second pair)
@@ -60,8 +61,10 @@
           :properties (list (list (1- *directory-mode-name-preceding-offset*)
                                   *directory-mode-name-preceding-offset*
                                   (list 'face (make-face nil
-                                                         :font (gp:find-best-font (window-text-pane (current-window))
-                                                                                  (gp:make-font-description :family nerd-icons:*nerd-font-family*))
+                                                         :font (gp:find-best-font pane (gp:make-font-description :family nerd-icons:*nerd-font-family*))
+                                                         :size (gp:font-description-attribute-value
+                                                                (gp:font-description (capi:simple-pane-font pane))
+                                                                :size)
                                                          :foreground (color:get-color-translation color)))))))))))
 
 ;; We increased the prefix length, so we should redefine this
