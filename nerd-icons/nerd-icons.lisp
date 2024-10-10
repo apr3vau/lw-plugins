@@ -3770,6 +3770,14 @@
   (multiple-value-bind (sym color) (file-to-icon-name file)
       (values (get sym :char) color)))
 
+(editor:defcommand "Nerd Icons Install Font" (p)
+     "Open the system browser to download Nerd Font.
+User should install it manually."
+     "Open the system browser to download Nerd Font.
+User should install it manually."
+  (declare (ignore p))
+  (system:open-url "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/NerdFontsSymbolsOnly.zip"))
+
 (export '(file-to-icon-name
           file-to-icon-char
           extension-to-icon-name
