@@ -13,15 +13,17 @@
 (in-package editor)
 
 ;; 07Oct24: Similar with dired-kill-when-opening-new-dired-buffer
-(defvar *directory-mode-kill-when-opening-new-dired-buffer* nil
-  "If this option is T, kill the old Directory Mode
-buffer when opening new one.")
+(unless (boundp '*directory-mode-kill-when-opening-new-dired-buffer*)
+  (defvar *directory-mode-kill-when-opening-new-dired-buffer* nil
+    "If this option is T, kill the old Directory Mode
+buffer when opening new one."))
 
 ;; 07Oct24: Allow Directory Mode to print human-readable sizes for
 ;; files. The behavior can be controlled by this variable.
-(defvar *directory-mode-print-human-readable-size* t
-  "If this option is T, print the file size in
-human-readable form in Directory Mode, just like `ls -h'.")
+(unless (boundp '*directory-mode-print-human-readable-size*)
+  (defvar *directory-mode-print-human-readable-size* t
+    "If this option is T, print the file size in
+human-readable form in Directory Mode, just like `ls -h'."))
 
 (export '(*directory-mode-kill-when-opening-new-dired-buffer*
           *directory-mode-print-human-readable-size*))
