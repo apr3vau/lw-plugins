@@ -4,7 +4,7 @@
 ;; Enhancement & complement of the Directory Mode. Makes it more similar with Emacs's Dired
 
 ;; Features:
-;;     Command for keys: ^, +, U, L, B, C, R, w, ~, #
+;;     Command for keys: ^, +, U, L, B, C, R, w, E, ~, #
 ;;     Supporting Kill-when-Opening
 ;;     Supporting print file size in human-readable form
 ;;     Complement for edge cases (like in commands C & R), Make them DWIM
@@ -356,24 +356,23 @@ With a prefix argument P, copy next P lines files' name."
      "Copy marked files' name. The names are separated by a space.
 
 With a prefix argument P, copy next P lines files' name."
+  (setq p (or p 1))
   (let* ((point (current-point))
          (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer)))
-    (if p
-        (with-point ((temp point))
-          (save-kill-text nil (loop repeat p
-                                    for name = (directory-mode-point-filename point)
-                                    collect (namestring (merge-pathnames name dir)))))
-      (let (paths)
-        (directory-mode-map-lines
-         buffer
-         #'(lambda (string)
-             (when (string-directory-mode-marked-p string)
-               (push-end (namestring
-                          (merge-pathnames (string-directory-mode-filename string) dir))
-                         paths))))
-        (when paths (save-kill-text nil (format nil "~{~A ~}" paths))
-          (save-kill-text nil (namestring (merge-pathnames (directory-mode-point-filename point) dir))))))))
+         paths)
+    (directory-mode-map-lines
+     buffer
+     #'(lambda (string)
+         (when (string-directory-mode-marked-p string)
+           (push-end (string-directory-mode-filename string) paths))))
+    (let ((str (format nil "~{~A~^ ~}"
+                       (or paths
+                           (loop repeat p
+                                 for pt = (copy-point point :temp) then (line-offset pt 1)
+                                 until (null pt)
+                                 collect (directory-mode-point-filename pt))))))
+      (save-kill-text nil str)
+      (message "~A" str))))
 
 (defcommand "Directory Mode Flag Backup Files" (p)
      "Flag all backup files (name end up with '~') for deletion."
@@ -409,6 +408,34 @@ With a prefix argument P, copy next P lines files' name."
    'point-directory-mode-set-delete
    t))
 
+(defcommand "Directory Mode Do Open" (p)
+     "Open the marked or next P files using external program."
+     "Open the marked or next P files using external program."
+  (setq p (or p 1))
+  (let* ((point (current-point))
+         (buffer (point-buffer point))
+         (dir (directory-mode-buffer-directory buffer))
+         thereis-marked-p)
+    (labels ((find-executable (name)
+               (loop for dir in (split-sequence '(#\:) (environment-variable "PATH"))
+                     thereis (car (directory (make-pathname :name name :defaults (truename dir))))))
+             (open-file (path)
+               (sys:call-system (string-append #+mswindows "start"
+                                               #+darwin "open"
+                                               #+linux (or (find-executable "xdg-open") "open")
+                                               " " (namestring (truename path))))))
+      (directory-mode-map-lines
+       buffer
+       (lambda (string)
+         (when (string-directory-mode-marked-p string)
+           (open-file (merge-pathnames (string-directory-mode-filename string) dir))
+           (setq thereis-marked-p t))))
+      (unless thereis-marked-p
+        (loop repeat p
+              for pt = (copy-point point :temp) then (line-offset pt 1)
+              until (null pt)
+              do (open-file (merge-pathnames (directory-mode-point-filename pt) dir)))))))
+
 ;; Bindings
 
 (bind-key "Bury Buffer"                         "q" :mode "Directory")
@@ -416,6 +443,7 @@ With a prefix argument P, copy next P lines files' name."
 (bind-key "Directory Mode Unmark All Marks"     "U" :mode "Directory")
 (bind-key "Directory Mode Do Load"              "L" :mode "Directory")
 (bind-key "Directory Mode Do Compile"           "B" :mode "Directory")
+(bind-key "Directory Mode Do Open"              "E" :mode "Directory")
 (bind-key "Directory Mode Create Directory"     "+" :mode "Directory")
 (bind-key "Directory Mode Rename"               "R" :mode "Directory")
 (bind-key "Directory Mode Copy Marked"          "C" :mode "Directory")
