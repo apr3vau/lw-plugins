@@ -61,10 +61,13 @@
           :properties (list (list (1- *directory-mode-name-preceding-offset*)
                                   *directory-mode-name-preceding-offset*
                                   (list 'face (make-face nil
-                                                         :font (gp:find-best-font pane (gp:make-font-description :family nerd-icons:*nerd-font-family*))
-                                                         :size (gp:font-description-attribute-value
-                                                                (gp:font-description (capi:simple-pane-font pane))
-                                                                :size)
+                                                         :font (gp:find-best-font
+                                                                pane
+                                                                (gp:make-font-description
+                                                                 :family nerd-icons:*nerd-font-family*
+                                                                 :size (gp:font-description-attribute-value
+                                                                        (gp:font-description (capi:simple-pane-font pane))
+                                                                        :size))) 
                                                          :foreground (color:get-color-translation color)))))))))))
 
 ;; We increased the prefix length, so we should redefine this
