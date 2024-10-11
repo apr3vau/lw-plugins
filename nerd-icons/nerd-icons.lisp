@@ -3760,6 +3760,7 @@
             (when (or (and name (> (length name) 0) (eql (char name (1- (length name))) #\~))
                       (and type (> (length type) 0) (eql (char type (1- (length type))) #\~)))
               (return (values 'md-file-restore-outline 'gray)))
+            #+unix
             (when (and (member type '(nil :unspecific))
                        (file-executable-p path))
               (return (values 'fa-app-store 'blue)))
