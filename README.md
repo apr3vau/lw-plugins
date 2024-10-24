@@ -16,6 +16,7 @@ Here we provide:
 - An output stream that support ANSI escape sequences and format the output into Editor buffer ([escaped-editor-stream.lisp](./escaped-editor-stream.lisp))
 - A enhancing / bugfixing / edge-case completing plugin for LispWorks Directory Mode, make it more similar with Emacs's dired ([directory.lisp](./directory.lisp))
 - An expand-region plugin for Lisp editing in LispWorks Editor, similar with [expand-region.el](https://github.com/magnars/expand-region.el) ([expand-region.lisp](./expand-region.lisp))
+- A Lisp form aligning facility ([align.lisp](./align.lisp))
 - A simple pair-editing facility like Emacs's electric-pair-mode, with just enough of functions ([pair.lisp](./pair.lisp))
 
 ## Usage

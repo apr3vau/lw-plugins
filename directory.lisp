@@ -32,13 +32,13 @@ human-readable form in Directory Mode, just like `ls -h'."))
 (defun delete-directory-tree (dir)
   "Recursively delete directory and its contents."
   (let* ((truename (truename dir))
-         (files (sort (directory (make-pathname :name :wild :type :wild
-                                                :directory (append (pathname-directory truename) (list :wild-inferiors))
-                                                :defaults truename)
-                                 :directories t :link-transparency nil)
-                      (lambda (p1 p2)
-                        (> (length (pathname-directory p1))
-                           (length (pathname-directory p2)))))))
+         (files    (sort (directory (make-pathname :name :wild :type :wild
+                                                   :directory (append (pathname-directory truename) (list :wild-inferiors))
+                                                   :defaults truename)
+                                    :directories t :link-transparency nil)
+                         (lambda (p1 p2)
+                           (> (length (pathname-directory p1))
+                              (length (pathname-directory p2)))))))
     (flet ((dir-p (file) (not (or (stringp (pathname-name file))
                                   (stringp (pathname-type file))))))
       (map nil (lambda (file) (unless (dir-p file) (delete-file file))) files)
@@ -129,12 +129,12 @@ then load each system being defined in this file."
 
 (defadvice (directory-mode-delete-deleted-lines-files lw-plugins :around) (buffer)
   (let ((directory (directory-mode-buffer-directory buffer))
-        (count 0))
+        (count     0))
     (directory-mode-map-lines-modifying
      buffer
      #'(lambda (string)
          (when (string-directory-mode-deleted-p string)
-           (let* ((name (string-directory-mode-filename string))
+           (let* ((name          (string-directory-mode-filename string))
                   (full-pathname (merge-pathnames name directory)))
              (if (file-directory-p full-pathname)
                  ;; Makes it able to delete directory
@@ -149,14 +149,14 @@ then load each system being defined in this file."
 (defadvice (directory-mode-move-or-copy-marked-lines-files lw-plugins :around)
     (buffer target-directory copy-p)
   (let ((directory (directory-mode-buffer-directory buffer))
-        (count 0))
+        (count     0))
     (directory-mode-map-lines-modifying
      buffer
      #'(lambda (string)
          (when (string-directory-mode-marked-p string)
            (let* ((name (string-directory-mode-filename string))
                   (from (merge-pathnames name directory))
-                  (to (merge-pathnames name target-directory)))
+                  (to   (merge-pathnames name target-directory)))
              ;; Add file-exist check here
              (when (or (not (probe-file to))
                        (confirm-it (format nil "~A exists, replace it?" to)))
@@ -185,9 +185,9 @@ then load each system being defined in this file."
 ;;     Allow input of both new directory or new name
 (defadvice (directory-mode-rename-command lw-plugins :around) (p)
   (declare (ignore p))
-  (let* ((point (current-point))
+  (let* ((point  (current-point))
          (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer)))
+         (dir    (directory-mode-buffer-directory buffer)))
     (if (> (directory-mode-count-marked-lines buffer) 0)
         (directory-mode-do-move-or-copy-files buffer nil)
       (when-let* ((name (directory-mode-point-filename point))
@@ -221,9 +221,9 @@ then load each system being defined in this file."
      "Copy the files that are marked to another directory"
      "Copy the files that are marked to another directory"
   (declare (ignore p))
-  (let* ((point (current-point))
+  (let* ((point  (current-point))
          (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer)))
+         (dir    (directory-mode-buffer-directory buffer)))
     (if (> (directory-mode-count-marked-lines buffer) 0)
         (directory-mode-do-move-or-copy-files buffer t)
       (when-let* ((name (directory-mode-point-filename point))
@@ -272,10 +272,10 @@ then load each system being defined in this file."
      "Load the target file(s)."
      "Load the target file(s)."
   (declare (ignore p))
-  (let* ((point (current-point))
+  (let* ((point  (current-point))
          (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer))
-         (count (directory-mode-count-marked-lines buffer)))
+         (dir    (directory-mode-buffer-directory buffer))
+         (count  (directory-mode-count-marked-lines buffer)))
     (if (> count 0)
         (directory-mode-map-lines
          buffer
@@ -294,10 +294,10 @@ then load each system being defined in this file."
 (defcommand "Directory Mode Do Compile" (p)
      "Compile the target files. Call with prefix argument to compile it in-memory and load."
      "Compile the target files. Call with prefix argument to compile it in-memory and load."
-  (let* ((point (current-point))
+  (let* ((point  (current-point))
          (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer))
-         (count (directory-mode-count-marked-lines buffer)))
+         (dir    (directory-mode-buffer-directory buffer))
+         (count  (directory-mode-count-marked-lines buffer)))
     (if (> count 0)
         (let ((output (unless p
                         (prompt-for-file :prompt "select target directory for FASL files: "
@@ -318,8 +318,8 @@ then load each system being defined in this file."
                    (when error-p (editor-error (format nil "Error while compile ~A."))))))))
           (if p (message "~A files have been compiled in memory and loaded." count)
             (message "~A files have been compiled to ~A." count output)))
-      (let* ((name (directory-mode-point-filename point))
-             (path (merge-pathnames name dir))
+      (let* ((name   (directory-mode-point-filename point))
+             (path   (merge-pathnames name dir))
              (output (unless p
                        (prompt-for-file :prompt (format nil "Compile ~A to: " name)
                                         :must-exist nil
@@ -357,7 +357,7 @@ With a prefix argument P, copy next P lines files' name."
 
 With a prefix argument P, copy next P lines files' name."
   (setq p (or p 1))
-  (let* ((point (current-point))
+  (let* ((point  (current-point))
          (buffer (point-buffer point))
          paths)
     (directory-mode-map-lines
@@ -387,7 +387,7 @@ With a prefix argument P, copy next P lines files' name."
 
 (defcommand "Directory Mode Flag Auto Save Files" (p)
      "Flag all auto-save files (name around with '#') for deletion."
-     "Flag all auto-save files (nams around with '#') for deletion."
+     "Flag all auto-save files (name around with '#') for deletion."
   (declare (ignore p))
   (directory-mode-command-check-and-set-flag
    (lambda (point)
@@ -412,9 +412,9 @@ With a prefix argument P, copy next P lines files' name."
      "Open the marked or next P files using external program."
      "Open the marked or next P files using external program."
   (setq p (or p 1))
-  (let* ((point (current-point))
+  (let* ((point  (current-point))
          (buffer (point-buffer point))
-         (dir (directory-mode-buffer-directory buffer))
+         (dir    (directory-mode-buffer-directory buffer))
          thereis-marked-p)
     (labels ((find-executable (name)
                (loop for dir in (split-sequence '(#\:) (environment-variable "PATH"))
