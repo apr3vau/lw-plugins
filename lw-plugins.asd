@@ -9,6 +9,7 @@
                (:file "directory")
                (:file "expand-region")
                (:file "editor-markdown")
+               (:file "align")
                (:file "pair")))
 
 (defsystem lw-plugins/nerd-icons
