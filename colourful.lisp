@@ -230,7 +230,10 @@ toggle the mode when `p' is nil."
     (setf (editor:buffer-minor-mode buffer "Colourful")
           (if p (plusp p) (not (editor:buffer-minor-mode buffer "Colourful"))))))
 
-(editor:define-file-type-hook ("lispworks" "lisp" "lsp") (buffer type)
-    (declare (ignore type))
-    (setf (editor:buffer-major-mode buffer) "Lisp")
-    (setf (editor:buffer-minor-mode buffer "Colourful") t))
+(defun enable-colourful-mode (buffer &rest args)
+  (declare (ignore args))
+  (setf (editor:buffer-minor-mode buffer "Colourful") t))
+
+(editor:add-global-hook editor:lisp-mode-hook 'enable-colourful-mode)
+
+(export '(*builtin-symbols* colourful-mode-command enable-colourful-mode))
