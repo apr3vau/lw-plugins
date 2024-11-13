@@ -3581,7 +3581,7 @@
     ;; Data storager
     ((or abb apk) (values 'md-android 'green))
     (ipa (values 'fa-app-store 'blue))
-    ((or 7z ace alz arc b ba bin bz2 cab mix lz lzo lzma lzx rar tar gz gzip xz z zip) (values 'oct-file-zip 'orange))
+    ((or 7z ace alz arc b ba bin bz2 cab mix lz lzo lzma lzx rar tar tbz tgz tzst gz gzip xz z zst zlib zip) (values 'oct-file-zip 'orange))
     ((or deb rpm pkg pkgbuild whl msix) (values 'md-package-variant 'light-orange))
     ((or sql db mda mdb wmdb odb) (values 'md-database 'light-orange))
     (sqlite (values 'dev-sqlite 'dark-blue))
@@ -3745,7 +3745,8 @@
   (block nil
     (let ((name (pathname-name path))
           (type (pathname-type path)))
-      (if (or name type)
+      (if (or (not (member name '(nil :unspecific)))
+              (not (member type '(nil :unspecific))))
           (progn
             (when (file-link-p path) (return 'cod-file-symlink-file))
             (when name
