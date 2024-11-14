@@ -46,6 +46,31 @@ human-readable form in Directory Mode, just like `ls -h'."))
     (handler-case (delete-directory truename t)
       (error (e) (editor-error "Cannot delete directory: ~A" truename)))))
 
+(defun directory-pathname-p (pathname)
+  (declare (inline directory-pathname-p))
+  (and (member (pathname-name pathname) '(nil :unspecific))
+       (member (pathname-type pathname) '(nil :unspecific))))
+
+(defun copy-directory (target new)
+  (unless (directory-pathname-p new)
+    (setq new (make-pathname
+               :name :unspecific :type :unspecific
+               :directory (append (pathname-directory new) (list (file-namestring new))))))
+  (let* ((old-dir (pathname-directory target))
+         (new-dir (pathname-directory new))
+         (old-dir-length (length old-dir)))
+    (loop for file in (directory
+                       (make-pathname :name :wild :type :wild
+                                      :directory (append old-dir '(:wild-inferiors))
+                                      :defaults target))
+          for new-file = (make-pathname
+                          :name (pathname-name file) :type (pathname-type file)
+                          :directory (append new-dir (subseq (pathname-directory file) old-dir-length))
+                          :defaults new)
+          do (ensure-directories-exist new-file)
+             (copy-file file new-file))
+    new))
+
 ;; The special verify-func used by our copy / rename commands,
 ;; Allowing both directory or file, only check wildcards.
 (defun directory-mode-move-or-copy-file-prompt-verify (string parse-inf)
@@ -161,7 +186,10 @@ then load each system being defined in this file."
              (when (or (not (probe-file to))
                        (confirm-it (format nil "~A exists, replace it?" to)))
                (if copy-p
-                   (copy-file from to)
+                 ;; 14Nov24: Support copy directory
+                 (if (file-directory-p from)
+                   (copy-directory from to)
+                   (copy-file from to))
                  (rename-file from to))
                (incf count)
                (unless copy-p
@@ -198,11 +226,7 @@ then load each system being defined in this file."
                                         :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
         (block nil
           (let ((old (merge-pathnames name dir)))
-            (if (or (not (member (pathname-name new) '(nil :unspecific)))
-                    (not (member (pathname-type new) '(nil :unspecific))))
-              (if (probe-file new)
-                (unless (confirm-it (format nil "File ~A exists.  Overwrite it anyway?" new))
-                  (return)))
+            (if (directory-pathname-p new)
               (progn
                 (if (probe-file new)
                   (when (file-directory-p old)
@@ -214,7 +238,10 @@ then load each system being defined in this file."
                       (ensure-directories-exist new)
                       (return))))
                 (unless (file-directory-p old)
-                  (setf new (merge-pathnames (file-namestring old) new)))))
+                  (setf new (merge-pathnames (file-namestring old) new))))
+              (if (probe-file new)
+                (unless (confirm-it (format nil "File ~A exists.  Overwrite it anyway?" new))
+                  (return))))
             (when (rename-file old new)
               (revert-buffer-command nil)
               (message "renamed ~a to ~a" name new))))))))
@@ -237,11 +264,7 @@ then load each system being defined in this file."
                                         :verify-func #'directory-mode-move-or-copy-file-prompt-verify)))
         (block nil
           (let ((old (merge-pathnames name dir)))
-            (if (or (not (member (pathname-name new) '(nil :unspecific)))
-                    (not (member (pathname-type new) '(nil :unspecific))))
-              (if (probe-file new)
-                (unless (confirm-it (format nil "File ~A exists.  Overwrite it anyway?" new))
-                  (return)))
+            (if (directory-pathname-p new)
               (progn
                 (if (probe-file new)
                   (when (file-directory-p old)
@@ -253,8 +276,13 @@ then load each system being defined in this file."
                       (ensure-directories-exist new)
                       (return))))
                 (unless (file-directory-p old)
-                  (setf new (merge-pathnames (file-namestring old) new)))))
-            (when (copy-file old new)
+                  (setf new (merge-pathnames (file-namestring old) new))))
+              (if (probe-file new)
+                (unless (confirm-it (format nil "File ~A exists.  Overwrite it anyway?" new))
+                  (return))))
+            (when (if (file-directory-p old)
+                    (copy-directory old new)
+                    (copy-file old new))
               (revert-buffer-command nil)
               (message "Copied ~a to ~a" name new))))))))
 
