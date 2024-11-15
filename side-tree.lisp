@@ -825,6 +825,7 @@ If there's no Side Tree in current editor, open a new one."
   (if-let (project (get-text-property (current-point) :project))
     (let ((new-name (prompt-for-string :prompt "New Name: ")))
       (setf (project-name project) new-name)
+      (save-config)
       (refresh-workspace-buffer (buffer-value (current-buffer) 'workspace)))
     (editor-error "There's no project here")))
 

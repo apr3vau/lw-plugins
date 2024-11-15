@@ -6,6 +6,7 @@
   :license "0BSD"
   :components ((:file "colourful")
                (:file "flex-complete")
+               (:file "side-tree")
                (:file "directory")
                (:file "expand-region")
                (:file "editor-markdown")
