@@ -19,85 +19,40 @@
 
 ;; Face definitions
 
-(editor:make-face 'prefix-face
-                  :bold-p t
-                  :foreground (editor::create-dark-background-switchable-color :red :deeppink)
-                  :if-exists :overwrite
-                  :documentation "Face for characters that has attribute :PREFIX in :LISP-SYNTAX attributes")
+;; We define our own version of built-in faces here, according to our personal preference.
+;; Defining your own if you want another style.
 (editor:make-face 'declaration-face
                   :italic-p t
                   :foreground :orange
                   :if-exists :overwrite
-                  :documentation "Face for declarations, e.g. DECLARE, OPTIMIZE, IGNORE, etc.")
-
-;; We define our own version of built-in faces here, according to our personal preference.
-;; Defining your own if you want another style.
-(editor:make-face 'font-lock-builtin-face
-                  :bold-p t
+                  :documentation "Face for declarations, e.g. DECLARE, OPTIMIZE, IGNORE, INLINE, etc.")
+(editor:make-face 'special-operator-face
+                  :foreground (editor::create-dark-background-switchable-color :turquoise4 :darkslategray2)
+                  :if-exists :overwrite)
+(editor:make-face 'function-face
+                  :foreground (editor::create-dark-background-switchable-color :blue3 :lightblue)
+                  :if-exists :overwrite)
+(editor:make-face 'macro-face
+                  :foreground (editor::create-dark-background-switchable-color :slateblue3 :darkolivegreen2)
+                  :if-exists :overwrite)
+(editor:make-face 'type-face
+                  :foreground (editor::create-dark-background-switchable-color :forestgreen :burlywood2)
+                  :if-exists :overwrite)
+(editor:make-face 'builtin-face
                   :italic-p t
-                  :foreground (editor::create-dark-background-switchable-color :orchid :pink)
+                  :foreground (create-dark-background-switchable-color :orchid :pink)
                   :if-exists :overwrite)
-(editor:make-face 'font-lock-type-face
-                  :bold-p t
-                  :italic-p t
-                  :foreground (editor::create-dark-background-switchable-color :forestgreen :yellow)
-                  :if-exists :overwrite)
-(editor:make-face 'font-lock-function-name-face
-                  :bold-p t
-                  :foreground (editor::create-dark-background-switchable-color :blue :lightblue)
-                  :if-exists :overwrite)
-;; 02Oct24: Fix variable face definition
-(editor:make-face 'font-lock-variable-name-face
+(editor:make-face 'variable-face
                   :foreground (editor::create-dark-background-switchable-color :darkgoldenrod :lightgoldenrod)
                   :if-exists :overwrite)
-(editor:make-face 'font-lock-keyword-face
-                  :bold-p t
-                  :foreground (editor::create-dark-background-switchable-color :purple :light-red)
-                  :if-exists :overwrite)
 
-(export '(prefix-face declaration-face font-lock-builtin-face font-lock-type-face font-lock-function-name-face font-lock-keyword-face))
+(export '(declaration-face builtin-face type-face function-face macro-face special-operator-face variable-face))
 
 ;; Symbol categories
 
-(defvar *definition-symbols*
-  (nconc (regexp-find-symbols "^def" :packages (find-package 'common-lisp))
-         '(capi:define-interface capi:define-command capi:define-layout capi:define-menu)
-         '(editor:defcommand editor:defattribute editor:defmode)
-         (regexp-find-symbols "^define" :packages (list (find-package 'editor)
-                                                        (find-package 'dspec))
-                              :external-only t)
-         '(dspec:def)
-         '(call-next-method call-method))
-  "Function / Macro symbols that are used to defining things.")
-
-(defvar *builtin-symbols*
-  (nconc (mapcar #'intern
-                 (mapcar #'string-upcase
-                         '("or" "and" "not"
-                           "when" "unless" "cond" "if"
-                           "case" "ecase" "typecase" "etypecase"
-                           "loop" "loop-finish" "do" "do*" "dotimes" "dolist"
-                           "do-symbols" "do-external-symbols" "do-all-symbols"
-                           "proclaim" "declaim" "declare"
-                           "flet" "labels" "macrolet"
-                           "block" "return" "return-from"
-                           "catch" "throw" "tagbody"
-                           "handler-case" "handler-bind"
-                           "restart-case" "restart-bind" "with-simple-restart"
-                           "let" "let*" "prog" "destructuring-bind"
-                           "multiple-value-bind" "multiple-value-prog1" "values"
-                           "progn" "progv" "prog1" "prog2"
-                           "inline" "unwind-protect"
-                           "eval-when"
-                           "with-slots" "with-accessors"
-                           "with-input-from-string" "with-output-to-string"
-                           "with-open-file" "with-open-stream"
-                           "with-hash-table-iterator" "with-package-iterator"
-                           "with-compilation-unit" "with-standard-io-syntax"
-                           "pprint-logical-block" "print-unreadable-object")))
-         *definition-symbols*)
-  "Special symbols that should be colored in FONT-LOCK-BUILTIN-FACE.
-We used the list present in EDITOR::*LISP-MODE-CONTROL-STRUCTURES-FSA*")
+(defvar *special-operators*
+  (loop for sym being each present-symbol of (find-package "CL")
+        when (special-operator-p sym) collect sym))
 
 ;; Fontifying
 
@@ -109,33 +64,42 @@ We used the list present in EDITOR::*LISP-MODE-CONTROL-STRUCTURES-FSA*")
                        (find-package (if (string= (car split) "")
                                          "KEYWORD"
                                        (string-upcase (car split)))))
-                     (editor::buffer-package-to-use start)))
-         (sym (find-symbol symname sympak))
-         (face (if sym
-                   (cond ((member sym '(t nil)) nil)
-                         ((member sym *builtin-symbols*)
-                          'font-lock-keyword-face)
-                         ((eq (symbol-package sym) (find-package "KEYWORD"))
-                          'font-lock-builtin-face)
-                         ((char= (schar str 0) #\&)
-                          'font-lock-type-face)
-                         ((or (find-class sym nil) (find-package sym))
-                          'font-lock-type-face)
-                         ((or (fboundp sym) (macro-function sym))
-                          'font-lock-function-name-face)
-                         ((boundp sym)
-                          'font-lock-variable-name-face)
-                         (t nil))
-                 (when (string= (car split) "")
-                   'font-lock-builtin-face))))
-    (if (and (> (length split) 1)
-             (> (length (car split)) 0))
-        (editor:with-point ((p start))
-          (editor:character-offset p (+ (length (car split))
-                                        (1- (length split))))
-          (editor::font-lock-apply-highlight start p 'font-lock-type-face)
-          (when face (editor::font-lock-apply-highlight p end face)))
-      (when face (editor::font-lock-apply-highlight start end face)))))
+                     (editor::buffer-package-to-use start))))
+    (multiple-value-bind (sym status)
+        (find-symbol symname sympak)
+      (let ((face (if status
+                    (cond ((member sym '(t nil))
+                           'special-operator-face)
+                          ((member sym *special-operators*)
+                           'special-operator-face)
+                          ((macro-function sym)
+                           'macro-face)
+                          ((member sym *builtin-symbols*)
+                           'font-lock-keyword-face)
+                          ((eq (symbol-package sym) (find-package "KEYWORD"))
+                           'font-lock-builtin-face)
+                          ((char= (schar str 0) #\&)
+                           'special-operator-face)
+                          ((or (find-class sym nil) (find-package sym)
+                               (ignore-errors (subtypep sym t)))
+                           'type-face)
+                          ((fboundp sym)
+                           'function-face)
+                          ((boundp sym)
+                           'variable-face)
+                          (t nil))
+                    (cond ((string= (car split) "")
+                           'font-lock-builtin-face)
+                          ((find-package symname)
+                           'type-face)))))
+        (if (and (> (length split) 1)
+                 (> (length (car split)) 0))
+          (editor:with-point ((p start))
+            (editor:character-offset p (+ (length (car split))
+                                          (1- (length split))))
+            (editor::font-lock-apply-highlight start p 'type-face)
+            (when face (editor::font-lock-apply-highlight p end face)))
+          (when face (editor::font-lock-apply-highlight start end face)))))))
 
 (defun fontify-single-form (start end)
   (editor:with-point ((point start))
@@ -143,11 +107,11 @@ We used the list present in EDITOR::*LISP-MODE-CONTROL-STRUCTURES-FSA*")
           do (case attr
                (:prefix t)
                (:open-paren
-                (editor::font-lock-apply-highlight start point 'prefix-face)
+                (editor::font-lock-apply-highlight start point 'special-operator-face)
                 (fontify-list point end)
                 (return))
                (:constituent
-                (editor::font-lock-apply-highlight start point 'prefix-face)
+                (editor::font-lock-apply-highlight start point 'special-operator-face)
                 (fontify-symbol point end)
                 (return))
                (t (return)))
