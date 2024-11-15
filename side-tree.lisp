@@ -613,11 +613,13 @@ KIND is the KIND property of the entry.")
                      (let ((win (getf *windows-plist* pane)))
                        (if (editor::window-alive-p win) win
                          (progn (remf *windows-plist* pane) nil)))
-                     (if (> (length (capi:layout-description
-                                     (capi:element-parent (capi:element-parent pane))))
-                            1)
-                       (editor-error "Side Tree cannot initialize when there's multiple windows in current editor.")
-                       (create-side-window)))))
+                     (cond ((> (length (capi:layout-description
+                                        (capi:element-parent (capi:element-parent pane))))
+                               1)
+                            (editor-error "Side Tree cannot initialize when there's multiple windows in current editor."))
+                           ((not (typep (capi:element-interface pane) 'lw-tools:editor))
+                            (editor-error "Side Tree cannot initialize outside of IDE Editor."))
+                           (t (create-side-window))))))
     (unless (boundp '*workspaces*)
       (initialize))
     (let ((workspace (or workspace
