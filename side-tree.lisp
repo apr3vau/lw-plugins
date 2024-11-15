@@ -755,6 +755,7 @@ If there's no Side Tree in current editor, open a new one."
          (buffer   (buffer-from-name (string-append "Workspace: " (workspace-name workspace))))
          (new-name (prompt-for-string :prompt "New name: ")))
     (setf (workspace-name workspace) new-name)
+    (save-config)
     (when buffer
       (setf (buffer-name buffer) (string-append "Workspace: " new-name)))))
 
@@ -816,6 +817,7 @@ If there's no Side Tree in current editor, open a new one."
          (projects  (workspace-projects workspace))
          (project   (prompt-for-project workspace :prompt "Project name: ")))
     (setf (workspace-projects workspace) (delete project projects))
+    (save-config)
     (refresh-workspace-buffer workspace)))
 
 (defcommand "Side Tree Rename Project" (p)
@@ -839,6 +841,7 @@ If there's no Side Tree in current editor, open a new one."
                (pos (position project (workspace-projects workspace))))
           (rotatef (nth pos (workspace-projects workspace))
                    (nth (1- pos) (workspace-projects workspace)))
+          (save-config)
           (refresh-workspace-buffer workspace)
           (buffer-start point)
           (loop until (eq (get-text-property point :project) project)
@@ -855,6 +858,7 @@ If there's no Side Tree in current editor, open a new one."
                (pos (position project (workspace-projects workspace))))
           (rotatef (nth pos (workspace-projects workspace))
                    (nth (1+ pos) (workspace-projects workspace)))
+          (save-config)
           (refresh-workspace-buffer workspace)
           (buffer-start point)
           (loop until (eq (get-text-property point :project) project)
