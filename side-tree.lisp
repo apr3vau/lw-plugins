@@ -520,20 +520,21 @@ KIND is the KIND property of the entry.")
           (setq point (valid-entry-offset point 1))
        until (or (null point) (null truenames)))))
 
-(defun insert-project (point project)
+(defun insert-project (point project &optional expand-p)
   (with-point ((point point))
     (editor::insert-buffer-string
      point (make-entry-string (project-name project) 'project-name-face t
-                              :kind :project :level 0 :truename (truename (project-path project))))
+                              :kind :project :level 0 :project project :truename (truename (project-path project))))
     (line-offset point -1 0)
-    (expand point :project)))
+    (when expand-p (expand point :project))))
 
-(defun insert-workspace (buffer workspace)
+(defun insert-workspace (buffer workspace &optional expand-first)
   (let ((point    (buffer-point buffer))
         (projects (workspace-projects workspace)))
     (if projects
-      (loop for project in projects
-            do (insert-project point project)
+      (loop for i from 0
+            for project in projects
+            do (insert-project point project (when expand-first (zerop i)))
                (buffer-end point)
                (insert-character point #\Newline))
       (insert-string point (format nil "No project in workspace.~%~%Run \"Side Tree Add Project\"~%to add one.")))))
@@ -547,7 +548,7 @@ KIND is the KIND property of the entry.")
           (setf (buffer-value buffer 'workspace) workspace)
           (with-buffer-writable buffer
             (with-buffer-locked (buffer)
-              (insert-workspace buffer workspace)))
+              (insert-workspace buffer workspace t)))
           (buffer-start (buffer-point buffer))
           (setf (buffer-modified buffer) nil)
           buffer))))
