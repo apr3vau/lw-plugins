@@ -74,8 +74,6 @@
                            'special-operator-face)
                           ((macro-function sym)
                            'macro-face)
-                          ((member sym *builtin-symbols*)
-                           'font-lock-keyword-face)
                           ((eq (symbol-package sym) (find-package "KEYWORD"))
                            'font-lock-builtin-face)
                           ((char= (schar str 0) #\&)
