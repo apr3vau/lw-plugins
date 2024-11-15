@@ -37,17 +37,23 @@
   "A plist of editor pane -> side tree window.")
 
 ;; Used for Lisp imenu
-(defvar *lisp-functions-symbols* '(defun defadvice))
-(defvar *lisp-methods-symbols* '(defgeneric defmethod))
+(defvar *lisp-functions-symbols*
+  '(defun defadvice))
+(defvar *lisp-methods-symbols*
+  '(defgeneric defmethod))
 (defvar *lisp-variables-symbols*
   '(defvar defparameter defconstant define-editor-variable fli:define-foreign-variable))
-(defvar *lisp-types-symbols* '(deftype defstruct defclass defpackage defmode define-condition))
+(defvar *lisp-types-symbols*
+  '(deftype defstruct defclass defpackage defmode define-condition))
 (defvar *lisp-macros-symbols*
   '(defmacro define-symbol-macro define-compiler-macro define-modify-macro
      defsetf define-setf-expander))
-(defvar *capi-symbols* '(capi:define-interface capi:define-layout capi:define-menu capi:define-command))
-(defvar *editor-commands-symbols* '(defcommand))
-(defvar *styles-symbols* '(color:define-color-alias make-face))
+(defvar *capi-symbols*
+  '(capi:define-interface capi:define-layout capi:define-menu capi:define-command))
+(defvar *editor-commands-symbols*
+  '(defcommand))
+(defvar *styles-symbols*
+  '(color:define-color-alias make-face))
 
 ;; Types
 
@@ -65,7 +71,7 @@
 
 (make-face 'project-name-face
            :if-exists :overwrite
-           :foreground (editor::create-dark-background-switchable-color :forestgreen :yellow)
+           :foreground (editor::create-dark-background-switchable-color :forestgreen :burlywood2)
            :bold-p t)
 (make-face 'directory-name-face
            :if-exists :overwrite
