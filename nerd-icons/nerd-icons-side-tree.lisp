@@ -32,7 +32,7 @@
                                            :size (gp:font-description-attribute-value
                                                   (gp:font-description (capi:simple-pane-font pane))
                                                   :size))) 
-                                   :foreground (editor::create-dark-background-switchable-color :forestgreen :yellow))))))
+                                   :foreground (editor::face-foreground (editor::find-face 'project-name-face)))))))
 
 (defmethod get-icon :around ((kind (eql :directory)) path)
   (get-nerd-icon path))
