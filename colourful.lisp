@@ -40,7 +40,7 @@
                   :if-exists :overwrite)
 (editor:make-face 'builtin-face
                   :italic-p t
-                  :foreground (create-dark-background-switchable-color :orchid :pink)
+                  :foreground (editor::create-dark-background-switchable-color :orchid :pink)
                   :if-exists :overwrite)
 (editor:make-face 'variable-face
                   :foreground (editor::create-dark-background-switchable-color :darkgoldenrod :lightgoldenrod)
