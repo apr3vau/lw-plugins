@@ -87,7 +87,7 @@
                            'variable-face)
                           (t nil))
                     (cond ((string= (car split) "")
-                           'font-lock-builtin-face)
+                           'builtin-face)
                           ((find-package symname)
                            'type-face)))))
         (if (and (> (length split) 1)
