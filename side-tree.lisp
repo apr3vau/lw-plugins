@@ -791,9 +791,7 @@ If there's no Side Tree in current editor, open a new one."
                                      :default          (editor::buffer-default-directory buffer)
                                      :file-directory-p t
                                      :must-exist       t))
-         (project   (make-project :name (when (directory-pathname-p dir)
-                                          (car (last (pathname-directory dir)))
-                                          (file-namestring dir))
+         (project   (make-project :name (car (last (pathname-directory dir)))
                                   :path dir)))
     (when (member dir (workspace-projects workspace) :key #'project-path :test #'equal)
       (editor-error "This project has existed in current workspace."))
@@ -830,6 +828,38 @@ If there's no Side Tree in current editor, open a new one."
       (save-config)
       (refresh-workspace-buffer (buffer-value (current-buffer) 'workspace)))
     (editor-error "There's no project here")))
+
+(defcommand "Side Tree Move Project Up" (p)
+     "Move the current project up."
+     "Move the current project up."
+  (declare (ignore p))
+  (let ((point (current-point)))
+    (if-let (project (get-text-property point :project))
+        (let* ((workspace (buffer-value (current-buffer) 'workspace))
+               (pos (position project (workspace-projects workspace))))
+          (rotatef (nth pos (workspace-projects workspace))
+                   (nth (1- pos) (workspace-projects workspace)))
+          (refresh-workspace-buffer workspace)
+          (buffer-start point)
+          (loop until (eq (get-text-property point :project) project)
+                do (line-offset point 1 0)))
+      (editor-error "There's no project here"))))
+
+(defcommand "Side Tree Move Project Down" (p)
+     "Move the current project down."
+     "Move the current project down."
+  (declare (ignore p))
+  (let ((point (current-point)))
+    (if-let (project (get-text-property point :project))
+        (let* ((workspace (buffer-value (current-buffer) 'workspace))
+               (pos (position project (workspace-projects workspace))))
+          (rotatef (nth pos (workspace-projects workspace))
+                   (nth (1+ pos) (workspace-projects workspace)))
+          (refresh-workspace-buffer workspace)
+          (buffer-start point)
+          (loop until (eq (get-text-property point :project) project)
+                do (line-offset point 1 0)))
+      (editor-error "There's no project here"))))
 
 ;; Actions
 
@@ -1104,6 +1134,8 @@ If there's no Side Tree in current editor, open a new one."
                   ("Side Tree Rename Project"       #("C-c" "C-p" "r"))
                   ("Side Tree Previous Project"     "C-k")
                   ("Side Tree Next Project"         "C-j")
+                  ("Side Tree Move Project Up"      "M-Up")
+                  ("Side Tree Move Project Down"    "M-Down")
                   ("Side Tree Add Workspace"        #("C-c" "C-w" "a"))
                   ("Side Tree Remove Workspace"     #("C-c" "C-w" "d"))
                   ("Side Tree Rename Workspace"     #("C-c" "C-w" "r"))
