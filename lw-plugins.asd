@@ -22,3 +22,9 @@
   :license "0BSD"
   :depends-on (lw-plugins/nerd-icons)
   :components ((:file "nerd-icons/nerd-icons-directory")))
+
+(defsystem lw-plugins/nerd-icons-side-tree
+  :author "April & May"
+  :license "0BSD"
+  :depends-on (lw-plugins/nerd-icons)
+  :components ((:file "nerd-icons/nerd-icons-side-tree")))

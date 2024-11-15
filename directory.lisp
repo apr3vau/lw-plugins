@@ -4,26 +4,28 @@
 ;; Enhancement & complement of the Directory Mode. Makes it more similar with Emacs's Dired
 
 ;; Features:
-;;     Command for keys: ^, +, U, L, B, C, R, w, E, ~, #
-;;     Supporting Kill-when-Opening
-;;     Supporting print file size in human-readable form
-;;     Complement for edge cases (like in commands C & R), Make them DWIM
-;;     Bugfix
+;; - Command for keys: ^, +, U, L, B, C, R, w, E, ~, #
+;; - Support loading ASDF system
+;; - Supporting Kill-when-Opening
+;; - Supporting print file size in human-readable form
+;; - Support delete directory tree & copy directory
+;; - Complement for edge cases (like in commands C & R), Make them DWIM
+;; - Bugfix
 
 (in-package editor)
 
 ;; 07Oct24: Similar with dired-kill-when-opening-new-dired-buffer
 (unless (boundp '*directory-mode-kill-when-opening-new-dired-buffer*)
-  (defvar *directory-mode-kill-when-opening-new-dired-buffer* nil
-    "If this option is T, kill the old Directory Mode
-buffer when opening new one."))
+  (eval '(defvar *directory-mode-kill-when-opening-new-dired-buffer* nil
+           "If this option is T, kill the old Directory Mode
+buffer when opening new one.")))
 
 ;; 07Oct24: Allow Directory Mode to print human-readable sizes for
 ;; files. The behavior can be controlled by this variable.
 (unless (boundp '*directory-mode-print-human-readable-size*)
-  (defvar *directory-mode-print-human-readable-size* t
-    "If this option is T, print the file size in
-human-readable form in Directory Mode, just like `ls -h'."))
+  (eval '(defvar *directory-mode-print-human-readable-size* t
+           "If this option is T, print the file size in
+human-readable form in Directory Mode, just like `ls -h'.")))
 
 (export '(*directory-mode-kill-when-opening-new-dired-buffer*
           *directory-mode-print-human-readable-size*))
@@ -92,13 +94,16 @@ If given file is an ASDF system definition file, load the file and
 then load each system being defined in this file."
   (if (string-equal (pathname-type path) "asd")
       (progn
+        (message "Loading ASDF system file ~A" (file-namestring path))
         (load path :package "ASDF")
         (asdf:map-systems
          (lambda (system)
            (when (equal (asdf:system-source-file system) path)
              (asdf:load-system system))))
         t)
-    (load path)))
+      (progn
+        (message "Loading ~A" (file-namestring path))
+        (load path))))
 
 ;; Editor functions advicing
 ;; 01Oct24: Use advice instead of arbitrary redefinition
@@ -454,13 +459,16 @@ With a prefix argument P, copy next P lines files' name."
          (dir    (directory-mode-buffer-directory buffer))
          thereis-marked-p)
     (labels ((find-executable (name)
+               (declare (inline find-executable))
                (loop for dir in (split-sequence '(#\:) (environment-variable "PATH"))
                      thereis (car (directory (make-pathname :name name :defaults (truename dir))))))
              (open-file (path)
-               (sys:call-system (string-append #+mswindows "start"
-                                               #+darwin "open"
-                                               #+linux (or (find-executable "xdg-open") "open")
-                                               " " (namestring (truename path))))))
+               (declare (inline open-file))
+               (sys:call-system
+                (string-append #+mswindows "start"
+                               #+darwin "open"
+                               #+linux (or (find-executable "xdg-open") "open")
+                               " " (namestring (truename path))))))
       (directory-mode-map-lines
        buffer
        (lambda (string)

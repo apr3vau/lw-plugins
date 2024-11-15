@@ -10,6 +10,8 @@ your own product.
 
 Here we provide:
 
+- [NEW] A project explorer alternative to [Treemacs](https://github.com/Alexander-Miller/treemacs) ([side-tree.lisp](./side-tree.lisp))
+- [NEW] The [Nerd Fonts](https://www.nerdfonts.com) integration for LispWorks Editor, Giving colourful icons to Directory Mode and Side Tree ([nerd-icons/](./nerd-icons/))
 - A Sly-style flexible fuzzy-matching in-place code completion for LispWorks Editor ([flex-complete.lisp](./flex-complete.lisp))
 - A decent syntax highlight method of Markdown for LispWorks Editor ([editor-markdown.lisp](./editor-markdown.lisp))
 - A decent & elaborate syntax highlight method of Lisp for LispWorks Editor ([colourful.lisp](./colourful.lisp))
@@ -37,6 +39,33 @@ There's also an ASDF system file. You can load it using ASDF:
 	(require "asdf")
 	(asdf:load-system :lw-plugins)
 
+### Nerd Icons
+
+To use Nerd Icons, you should install
+[NerdFonts]("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/NerdFontsSymbolsOnly.zip")
+ first. You can do that by involking `Nerd Icons Install Font` if you
+have load [nerd-icons.lisp](./nerd-icons/nerd-icons.lisp).
+
+> Note: If you choose to install other Nerd Fonts variant (not the Symbols Nerd Font), you should customize the `*nerd-font-family*` variable.
+
+The Directory Mode integration is at
+[nerd-icons-directory.lisp](./nerd-icons/nerd-icons-directory.lisp),
+ and the Side Tree integration is at
+[nerd-icons-side-tree.lisp](./nerd-icons/nerd-icons-side-tree.lisp).
+They're all relying to
+[nerd-icons.lisp](./nerd-icons/nerd-icons.lisp). You can use the ASDF
+systems `lw-plugins/nerd-icons-directory` and
+`lw-plugins/nerd-icons-side-tree` to load them selectively.
+
+For example, to load all features:
+
+```common-lisp
+(require "asdf")
+(asdf:load-system :lw-plugins)
+(asdf:load-system :lw-plugins/nerd-icons-directory)
+(asdf:load-system :lw-plugins/nerd-icons-side-tree)
+```
+
 ----------------
 
 ## Acknowledgements
@@ -52,6 +81,10 @@ Supporting Neurodiversity & Transgender & Plurality!
 ----------------
 
 ## Screenshots
+
+### Side Tree (with Nerd icons)
+
+![Side Tree](./images/side-tree.png)
 
 ### Flex completion & Colourful highlight
 
