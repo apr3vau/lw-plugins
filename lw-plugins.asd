@@ -4,14 +4,15 @@
 (defsystem lw-plugins
   :author "April & May"
   :license "0BSD"
-  :components ((:file "colourful")
-               (:file "flex-complete")
-               (:file "side-tree")
+  :components ((:file "align")
+               (:file "colourful")
                (:file "directory")
-               (:file "expand-region")
+               (:file "docstring-folding")
                (:file "editor-markdown")
-               (:file "align")
-               (:file "pair")))
+               (:file "expand-region")
+               (:file "flex-complete")
+               (:file "pair")
+               (:file "side-tree")))
 
 (defsystem lw-plugins/nerd-icons
   :author "April & May"

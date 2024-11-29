@@ -13,6 +13,7 @@
 
 ;; 02Oct24: Refactored. Support expands to word, prefix and upper string
 ;; 11Oct24: Refactored using PROG. Fix the support of expanding to string
+;; 29Nov24: Simply use face to judge strings...
 (defun expand-region (start end)
   "Core function of expand region.
 
@@ -47,8 +48,7 @@ form, upper string, or the whole buffer."
                    (eq (character-attribute :lisp-syntax prev-char) :prefix))
                (go form-current)
              (go form-before)))
-          ((with-point ((tmp start))
-             (null (form-offset tmp 1 t 1)))
+          ((equalp (get-text-property start 'face) *font-lock-string-face*)
            (go string-content))
           ((or (form-offset start -1)
                (form-offset end 1))

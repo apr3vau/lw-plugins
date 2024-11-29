@@ -10,7 +10,8 @@ your own product.
 
 Here we provide:
 
-- [NEW] A project explorer alternative to [Treemacs](https://github.com/Alexander-Miller/treemacs) ([side-tree.lisp](./side-tree.lisp))
+- [NEW] A docstring folding facility, similar with definition folding([docstring-folding.lisp](./docstring-folding.lisp))
+- [NEW] Side Tree, a project explorer alternative to [Treemacs](https://github.com/Alexander-Miller/treemacs) ([side-tree.lisp](./side-tree.lisp))
 - [NEW] The [Nerd Fonts](https://www.nerdfonts.com) integration for LispWorks Editor, Giving colourful icons to Directory Mode and Side Tree ([nerd-icons/](./nerd-icons/))
 - A Sly-style flexible fuzzy-matching in-place code completion for LispWorks Editor ([flex-complete.lisp](./flex-complete.lisp))
 - A decent syntax highlight method of Markdown for LispWorks Editor ([editor-markdown.lisp](./editor-markdown.lisp))

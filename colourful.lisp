@@ -28,6 +28,7 @@
                   :documentation "Face for declarations, e.g. DECLARE, OPTIMIZE, IGNORE, INLINE, etc.")
 (editor:make-face 'special-operator-face
                   :foreground (editor::create-dark-background-switchable-color :turquoise4 :darkslategray2)
+                  :bold-p t
                   :if-exists :overwrite)
 (editor:make-face 'function-face
                   :foreground (editor::create-dark-background-switchable-color :blue3 :lightblue)
