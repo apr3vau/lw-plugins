@@ -83,13 +83,9 @@ Supporting Neurodiversity & Transgender & Plurality!
 
 ## Screenshots
 
-### Side Tree (with Nerd icons)
+### Side Tree (with Nerd icons), Flex completion & Colourful highlight
 
-![Side Tree](./images/side-tree.png)
-
-### Flex completion & Colourful highlight
-
-![Flex completion](./images/completion-and-colourful.png)
+![Preview](./images/preview.png)
 
 ### Markdown
 
