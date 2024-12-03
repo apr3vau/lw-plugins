@@ -11,7 +11,7 @@
 ;; ellipses at the end, same with the definition folding.
 
 ;; Recommend binding
-;(bind-key "Toggle Current Docstring Folding" #("C-c" "C-d"))
+;(editor:bind-key "Toggle Current Docstring Folding" #("C-c" "C-d"))
 
 ;; To fold all definitions by default when opening lisp file,
 ;; add the following line to your ~/.lispworks
@@ -189,7 +189,7 @@
                (incf count)))))
         ;; Try to fold current form if there's no existed overlay in it
         (when (zerop count)
-          (docstring-folding-fold-form point))))))
+          (docstring-folding-fold-form start))))))
 
 (defcommand "Fold Buffer Docstrings" (p)
      "Fold all docstrings in current buffer."
