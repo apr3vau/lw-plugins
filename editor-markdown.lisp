@@ -287,7 +287,7 @@ change of font family or size to adapt the change."
              for c across (string-trim-whitespace line)
              count (eql c #\#) into result
              until (not (eql c #\#))
-             finally (return (and (or (unicode-ws-char-p c)
+             finally (return (and (or (and c (unicode-ws-char-p c))
                                       (= i (length line)))
                                   (<= 1 result 6))))))
 
