@@ -30,7 +30,7 @@ form, upper string, or the whole buffer."
              (with-point ((start (buffers-start buffer)))
                (with-buffer-locked (buffer :for-modification nil)
                  (loop
-                    (find-string "\"" start)
+                    (unless (find-string "\"" start) (return))
                     (when (point> start point) (return))
                     (when (evenp (loop for i downfrom -2
                                        for c = (character-at start i)

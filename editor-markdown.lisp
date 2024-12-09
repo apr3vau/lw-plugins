@@ -619,12 +619,19 @@ that contain the inline-component."
                                     (setq *-bold-opening nil))
                                   (when left-flanking-delimiter-run-p
                                     (setq *-bold-opening i))))
-                             (3 (if *-bold-italic-opening
-                                  (when right-flanking-delimiter-run-p
-                                    (push (list *-bold-italic-opening (+ 3 i)) bold-italics)
-                                    (setq *-bold-italic-opening nil))
-                                  (when left-flanking-delimiter-run-p
-                                    (setq *-bold-italic-opening i)))))
+                             (t (if (oddp len)
+                                  (if *-bold-italic-opening
+                                    (when right-flanking-delimiter-run-p
+                                      (push (list *-bold-italic-opening (+ 3 i)) bold-italics)
+                                      (setq *-bold-italic-opening nil))
+                                    (when left-flanking-delimiter-run-p
+                                      (setq *-bold-italic-opening i)))
+                                  (if *-bold-opening
+                                    (when right-flanking-delimiter-run-p
+                                      (push (list *-bold-opening (+ 2 i)) bolds)
+                                      (setq *-bold-opening nil))
+                                    (when left-flanking-delimiter-run-p
+                                      (setq *-bold-opening i))))))
                            (incf i (1- len)))))
                   (#\_ (unless (or single-code-span-opening double-code-span-opening)
                          (let* ((len (identical-char-length text i))
