@@ -137,6 +137,21 @@
     (handler-case (delete-directory truename t)
       (error (e) (editor-error "Cannot delete directory: ~A" truename)))))
 
+;; 12Dec24: Use this verify for copy / rename
+
+;; The special verify-func used by our copy / rename commands,
+;; Allowing both directory or file, only check wildcards.
+(defun move-or-copy-file-prompt-verify (string parse-inf)
+  (declare (ignore parse-inf))
+  (if (and (stringp string) (= (length string) 0))
+      (values nil "Illegal input : empty string")
+    (when-let (pn (if (pathnamep string) string
+                    (editor::pathname-or-lose (editor::relevant-pathname-end string))))
+      (if (wild-pathname-p pn)
+          (progn (message "~a has a wildcard in it" pn)
+            nil)
+        pn))))
+
 (defun prompt-for-project (workspace &rest args &key prompt)
   "Prompt for a Side Tree project in WORKSPACE by its name."
   (let ((projects (workspace-projects workspace)))
@@ -261,8 +276,7 @@ PATH is the truename of the entry.")
    (if (member (pathname-type path) '("lisp" "lsp" "lispworks")
                :test #'equal)
      (values (code-char 128221) nil)
-     (values (code-char 128196) nil)))
-  )
+     (values (code-char 128196) nil))))
 
 (defun switch-expand-state (point)
   (let* ((pos         (point-position point))
@@ -987,7 +1001,8 @@ If there's no Side Tree in current editor, open a new one."
               (new (prompt-for-file :default old
                                     :directory :output
                                     :must-exist nil
-                                    :prompt (format nil "Rename ~a to: " (file-namestring old)))))
+                                    :prompt (format nil "Rename ~a to: " (file-namestring old))
+                                    :verify-func #'move-or-copy-file-prompt-verify)))
     (block nil
       (if (directory-pathname-p new)
         (progn
@@ -1017,7 +1032,8 @@ If there's no Side Tree in current editor, open a new one."
               (new (prompt-for-file :default old
                                     :directory :output
                                     :must-exist nil
-                                    :prompt (format nil "Copy ~a to: " (file-namestring old)))))
+                                    :prompt (format nil "Copy ~a to: " (file-namestring old))
+                                    :verify-func #'move-or-copy-file-prompt-verify)))
     (block nil
       (if (directory-pathname-p new)
         (progn

@@ -548,6 +548,7 @@ that contain the inline-component."
         
         image-opening link-title-opening link-title-closing link-dest-opening
         pointy-opening
+
         (i 0))
     (symbol-macrolet ((inline-code-override-any
                        (setq single-strikethrough-opening nil double-strikethrough-opening nil
@@ -690,12 +691,14 @@ that contain the inline-component."
                                    link-title-opening nil
                                    link-dest-opening nil)))))
                   ((or #\Return #\Newline)
-                   (setq single-code-span-opening nil double-code-span-opening nil
-                         single-strikethrough-opening nil double-strikethrough-opening nil
-                         *-italic-opening nil *-bold-opening nil *-bold-italic-opening nil
-                         _-italic-opening nil _-bold-opening nil _-bold-italic-opening nil
-                         image-opening nil link-title-opening nil link-title-closing nil
-                         link-dest-opening nil pointy-opening nil))))
+                   ;; Ugly hack for paragraph break...
+                   (when (and (> i 0) (member (char text (1- i)) '(#\Return #\Newline)))
+                     (setq single-code-span-opening nil double-code-span-opening nil
+                           single-strikethrough-opening nil double-strikethrough-opening nil
+                           *-italic-opening nil *-bold-opening nil *-bold-italic-opening nil
+                           _-italic-opening nil _-bold-opening nil _-bold-italic-opening nil
+                           image-opening nil link-title-opening nil link-title-closing nil
+                           link-dest-opening nil pointy-opening nil)))))
               (incf i)
               (when (= i (length text)) (return)))))
     (list :code-spans code-spans :strikethroughs strikethroughs
