@@ -55,7 +55,7 @@ TARGET in the SOURCE. Otherwise return NIL."
         for c across target
         if (> (1+ start) (length source))
           do (return)
-        else do (setq start (position c source :start (1+ start)))
+        else do (setq start (position c source :start (1+ start) :test #'char-equal))
         if (null start) do (return)
         else collect start))
 
@@ -63,7 +63,6 @@ TARGET in the SOURCE. Otherwise return NIL."
   "Complete function for Flex Complete Symbol."
   (when (= (length str) 0) (return-from flex-complete-func))
   (let ((current-package (completion-arg-package arg))
-        (case (completion-arg-case arg))
         (split (split-sequence '(#\:) str))
         internal-packages external-packages
         result)
@@ -75,41 +74,51 @@ TARGET in the SOURCE. Otherwise return NIL."
       ;; One colon: All packages' externals
       (2 (setq external-packages (list-all-packages)))
       ;; Two colons: Only matched package's internals
-      (3 (setq internal-packages (loop with name = (string-upcase (car split))
+      (3 (setq internal-packages (loop with name = (string-upcase (first split))
                                        for package in (list-all-packages)
                                        when (flex-complete-fuzzy-search name (package-name package))
                                          collect package))))
     ;; Searching
-    (dolist (package external-packages)
-      (loop for sym being each external-symbol of package
-            for string = (let ((*package* current-package)
-                               (*print-case* case))
-                           (prin1-to-string sym))
-            when (eq (symbol-package sym) package)
-              do (when-let (starts (flex-complete-fuzzy-search str string))
-                   (push (cons sym starts) result))))
-    (dolist (package internal-packages)
-      (loop for sym being each present-symbol of package
-            for string = (let ((*package* current-package)
-                               (*print-case* case))
-                           (prin1-to-string sym))
-            for starts = (flex-complete-fuzzy-search str string)
-            when starts
-              do (push (cons sym starts) result)))
-    ;; Sort results according to "density" of matched characters
+    
+    ;; In this step we find symbol that fuzzy-matching the STR, and
+    ;; collect it with a embedded list structure: the SYM itself, a
+    ;; list of matched position STARTS (returned by
+    ;; FLEX-COMPLETE-FUZZY-SEARCH), and the string representation of
+    ;; the symbol STRING. These informations will be used for sorting.
+    (let ((*package* current-package))
+      (dolist (package external-packages)
+        (do-external-symbols (sym package)
+          (let ((string (prin1-to-string sym)))
+            (when-let (starts (flex-complete-fuzzy-search str string))
+              (push (list sym starts string) result)))))
+      (dolist (package internal-packages) 
+       (let ((syms (system:package-internal-symbols package)))
+          (dotimes (i (length syms))
+            (let ((sym (aref syms i)))
+              (when (symbolp sym)
+                (let ((string (prin1-to-string sym)))
+                  (when-let (starts (flex-complete-fuzzy-search str string))
+                    (push (list sym starts string) result)))))))))
+    ;; Sort symbols according to the "density" of matched characters -
+    ;; more the matched characters grouped together, more it is
+    ;; preferred. The start position of the first match is also count.
+    ;; If they're same, then rank two symbols by the length of their
+    ;; string representation.
     (sort result
           #'(lambda (list1 list2)
-              (let ((n1 (loop for j = 0 then i
-                              for i in (cdr list1)
-                              sum (- i j)))
-                    (n2 (loop for j = 0 then i
-                              for i in (cdr list2)
-                              sum (- i j))))
-                (if (= n1 n2)
-                    (< (length (symbol-name (first list1)))
-                       (length (symbol-name (first list2))))
-                  (< n1 n2)))))
-    (mapcar #'car (subseq result 0 (min *max-complete-items* (length result))))))
+              (destructuring-bind (starts1 string1) list1
+                (destructuring-bind (starts2 string2) list2
+                  (let ((n1 (loop for j = 0 then i
+                                  for i in starts1
+                                  sum (- i j)))
+                        (n2 (loop for j = 0 then i
+                                  for i in starts2
+                                  sum (- i j))))
+                    (if (= n1 n2)
+                      (< (length string1) (length string2))
+                      (< n1 n2))))))
+          :key #'cdr)
+    (mapcar #'first (subseq result 0 (min *max-complete-items* (length result))))))
 
 (defun flex-complete-symbol-completion-string-to-insert (res string package-and-case)
   "Modified version of SYMBOL-COMPLETION-STRING-TO-INSERT that
@@ -117,10 +126,13 @@ suitable for flex-completion.
 
 Do not raise error when the prefixing package is not found, to allow
 fuzzy package-name completion."
+  (print string)
   (if (stringp res)
       res
     (let* ((package (completion-arg-package package-and-case))
-           (case (completion-arg-case package-and-case))
+           (case (if (> (count-if #'upper-case-p string)
+                        (count-if #'lower-case-p string))
+                   :upcase :downcase))
            (res-package (symbol-package res))
            (name (symbol-name res))
            (pname (let ((*package* res-package)
