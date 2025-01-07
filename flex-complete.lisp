@@ -126,7 +126,6 @@ suitable for flex-completion.
 
 Do not raise error when the prefixing package is not found, to allow
 fuzzy package-name completion."
-  (print string)
   (if (stringp res)
       res
     (let* ((package (completion-arg-package package-and-case))

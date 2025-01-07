@@ -1,3 +1,19 @@
+;; Copyright (c) 2024, April & May
+;; SPDX-License-Identifier: 0BSD
+
+;; This is the Visual Line Mode for LispWorks Editor.
+
+;; Sometimes we use the Editor with serif font, and sometimes we want
+;; to work with truncated lines, then such a mode will be necessary.
+
+;; It uses the existing "cursorpos" system of LW Editor, which can
+;; positioning lines pixelwise horizontally, and character-wise
+;; vertically. The commands and behaviours are just like the
+;; visual-line-mode of Emacs.
+
+;; Usage: Load this file, enable "Visual Line" minor mode (with
+;; command "Visual Line Mode")
+
 (in-package editor)
 
 (defcommand "Beginning of Visual Line" (p)
