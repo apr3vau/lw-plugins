@@ -15,12 +15,11 @@
 
 ;; Features:
 ;; - 4-bit, 8-bit and 24-bit color render
+;; - ISO8859-1 and UTF-8 support
 ;; - Running simple TUI programs like Nano and Vim.
 
 ;; Limitations & TODOs
-;; - The PTY-STREAM only support ASCII characters
-;; - More C1 control codes support
-;; - Popular private sequences
+;; - More control sequences
 ;; - Constraint the Editor pane to fit the terminal better
 ;; - Optimization
 ;; - More tests
@@ -96,6 +95,10 @@
 (defun char-digit (char)
   (declare (inline char-digit))
   (- (char-code char) 48))
+
+(defun char-st-p (char)
+  (declare (inline char-st-p))
+  (member (char-code char) '(#x9C #x1B #x5C)))
 
 (defun ensure-move-to-column (point column)
   (unless (editor::move-to-column point column)
@@ -179,6 +182,7 @@
               (editor::point-before pt)
               (ensure-line-offset pt (1- width)))
             (editor::delete-characters pt -1)))
+         ((eql char #\Bell) (capi:beep-pane))
          ((eql char #\Backspace) (editor::point-before pt))
          (pending-sequence
           (push-end char pending-sequence)
@@ -191,6 +195,7 @@
               (case (pop pending)
                 (nil (return))
                 (#\[ (go csi-get-param))
+                (#\] (go osc-get-param))
                 (t (go finish)))
               csi-get-param
               (let ((c (car pending)))
@@ -207,6 +212,20 @@
                        (setq current-param nil)
                        (go csi-get-param))
                       (t (go csi-term))))
+              osc-get-param
+              (let ((c (car pending)))
+                (cond ((null c) (return))
+                      ((eql c #\;)
+                       (pop pending)
+                       (push-end (or current-param 0) csi-params)
+                       (setq current-param nil)
+                       (go osc-get-param))
+                      ((or (char-st-p c) (eql c #\Bell))
+                       (go osc-term))
+                      (t (setq current-param (if current-param
+                                               (string (pop pending))
+                                               (string-append current-param (string (pop pending)))))
+                         (go osc-get-param))))
               csi-term
               (push-end current-param csi-params)
               (setq param1 (first csi-params))
@@ -222,8 +241,17 @@
                 ((or #\H #\f) (go cup))
                 (#\J (go ed))
                 (#\K (go el))
+                (#\d (go vpa))
                 (#\m (go sgr))
                 (#\Tilde (go tilde))
+                (t (go finish)))
+              osc-term
+              (push-end current-param csi-params)
+              (setq param1 (first csi-params))
+              (cond
+                ((null param1) (return))
+                ((equal param1 "10") (when (equal (second csi-params) "?") "[97m"))
+                ((equal param1 "11") (when (equal (second csi-params) "?") "[40m"))
                 (t (go finish)))
               cuu
               (let ((col (editor:point-column pt)))
@@ -295,6 +323,7 @@
                             (editor:move-point start end)
                             (editor:line-offset start (- (1- height)) 0))
                           (editor:buffer-start start))
+                        (editor:move-point pt start)
                         (let* ((lines-after (count-lines-after pt))
                                (str (string-append (make-string (- height 1 lines-after) :initial-element #\Newline)
                                                    (make-string (editor:point-column pt) :initial-element #\Space))))
@@ -326,6 +355,13 @@
                                                   :initial-element #\Space))
                            col)))))
               (go finish)
+              vpa
+              (let ((col (editor:point-column pt)))
+                (editor:buffer-end pt)
+                (unless (editor:line-offset pt (- (if (and param1 (plusp param1)) param1 1) height))
+                  (editor:buffer-start pt)
+                  (ensure-line-offset pt (1- height)))
+                (ensure-move-to-column pt col))
               sgr
               (setq param1 (or (pop csi-params) 0))
               (case param1
@@ -339,7 +375,7 @@
                 (23 (setface :italic-p nil))
                 (24 (setface :underline-p nil))
                     
-                ((or 38 48) (case (second csi-params)
+                ((or 38 48) (case (pop csi-params)
                               (5 (go 8-bit))
                               (2 (go 24-bit))))
                 (39 (setface :foreground nil))
@@ -353,12 +389,13 @@
               (go finish)
               8-bit
               (setface (if (= param1 38) :foreground :background)
-                       (aref *8-bit-colors* (car (last csi-params))))
+                       (aref *8-bit-colors* (pop csi-params)))
               (when csi-params (go sgr))
               24-bit
               (setface (if (= param1 38) :foreground :background)
-                       (destructuring-bind (r g b) (last csi-params 3)
+                       (destructuring-bind (r g b) csi-params
                          (color:make-rgb (/ r 255) (/ g 255) (/ b 255))))
+              (setq csi-params (cdddr csi-params))
               (when csi-params (go sgr))
               tilde
               (case param1
@@ -428,11 +465,13 @@
    (command :initform '("/bin/sh")
             :initarg :command)
    (environment :initform nil
-                :initarg :environment)))
+                :initarg :environment)
+   (ctype :initform "UTF-8"
+          :initarg :ctype)))
 
 (defmethod initialize-instance :around ((stream pty-stream) &key)
   (call-next-method)
-  (with-slots (command environment) stream
+  (with-slots (command environment ctype) stream
     (setf (slot-value stream 'pty-process)
           (mp:process-run-function
            "PTY process" (list :local-terminator
@@ -485,34 +524,39 @@
       (fli:free c))))
 
 (defmethod stream:stream-read-char ((stream pty-stream))
-  #|(let ((first-byte (stream:stream-read-byte stream)))
-    (if (not (fixnump first-byte)) :eof
-      (let ((sign (floor first-byte 16)))
-        (if (< sign 8) (code-char first-byte)
-          (if (< sign #xC)
-            (error "Encoding not supported")
-            (let ((lst (list first-byte)))
-              (when (<= sign #xD)
-                (push-end (stream:stream-read-byte stream) lst))
-              (when (<= sign #xE)
-                (push-end (stream:stream-read-byte stream) lst))
-              (when (<= sign #xF)
-                (push-end (stream:stream-read-byte stream) lst))
-              (let* ((len (length lst))
-                     (ptr (fli:allocate-foreign-object :type '(:unsigned :byte) :nelems len :initial-contents lst)))
-                (unwind-protect
-                    (fli:convert-from-foreign-string ptr :external-format :utf-8 :length len :null-terminated-p nil)
-                  (fli:free ptr)))))))))|#
-  (code-char (stream:stream-read-byte stream)))
+  (with-slots (ctype) stream
+    (cond
+     ((search "UTF-8" ctype :test #'string-equal)
+      (let ((first-byte (stream:stream-read-byte stream)))
+        (if (not (fixnump first-byte)) :eof
+          (let ((sign (floor first-byte 16)))
+            (if (< sign #xC) (code-char first-byte)
+              (let ((lst (list first-byte)))
+                (when (<= sign #xD)
+                  (push-end (stream:stream-read-byte stream) lst))
+                (when (<= sign #xE)
+                  (push-end (stream:stream-read-byte stream) lst))
+                (when (<= sign #xF)
+                  (push-end (stream:stream-read-byte stream) lst))
+                (let* ((len (length lst))
+                       (ptr (fli:allocate-foreign-object :type '(:unsigned :byte) :nelems len :initial-contents lst)))
+                  (unwind-protect
+                      (char (fli:convert-from-foreign-string ptr :external-format :utf-8 :length len :null-terminated-p nil) 0)
+                    (fli:free ptr)))))))))
+     (t (code-char (stream:stream-read-byte stream))))))
 
 (defmethod stream:stream-write-char ((stream pty-stream) char)
-  (let ((code (char-code char)))
-    (if (< code #x80)
-      (stream:stream-write-byte stream code)
-      (multiple-value-bind (ptr len)
-          (fli:convert-to-foreign-string "你" :external-format :utf-8 :null-terminated-p nil)
-        (dotimes (i len)
-          (stream:stream-write-byte stream (fli:dereference ptr :index i)))))))
+  (with-slots (ctype) stream
+    (let ((code (char-code char)))
+      (cond
+       ((search "UTF-8" ctype :test #'string-equal)
+        (if (< code #x80)
+          (stream:stream-write-byte stream code)
+          (multiple-value-bind (ptr len)
+              (fli:convert-to-foreign-string (string char) :external-format :utf-8 :null-terminated-p nil)
+            (dotimes (i len)
+              (stream:stream-write-byte stream (fli:dereference ptr :index i))))))
+       (t (stream:stream-write-byte stream code))))))
 
 (defmethod close ((stream pty-stream) &key abort)
   (declare (ignore abort))
@@ -532,13 +576,14 @@
    `((:gesture-spec ,(lambda (pane x y spec)
                        (declare (ignore x y))
                        (with-slots (pty-stream) pane
-                         (print spec)
                          (let* ((data (sys:gesture-spec-data spec))
                                 (char (code-char data)))
                            (case (sys:gesture-spec-modifiers spec)
                              (0 (write-char char pty-stream))
                              (2 (if (alpha-char-p char)
-                                  (write-byte (- data 96) pty-stream)
+                                  (if (upper-case-p char)
+                                    (write-byte (- data 64) pty-stream)
+                                    (write-byte (- data 96) pty-stream))
                                   (case char
                                     (#\@ (write-char #\Null pty-stream))
                                     (#\[ (write-char #\Escape pty-stream))
@@ -553,22 +598,20 @@
                              (5 (format pty-stream "[~A;~A~~" data 10))
                              (7 (format pty-stream "[~A;~A~~" data 14))))
                          (format nil "~16R" (char-code #\Escape))
-                         
                          (force-output pty-stream)))))
    :create-callback (lambda (pane)
                       (with-slots (pty-stream escaped-output-stream relay-process) pane
                         (let ((buffer (capi:editor-pane-buffer pane)))
                           (setf escaped-output-stream (make-instance 'escaped-editor-stream :buffer buffer)
-                                pty-stream (make-instance 'pty-stream
-                                                          :command (list "/bin/sh" "-c"
-                                                                         (format nil "stty sane rows 24 columns 80 echo icrnl > /dev/null ; ~A"
-                                                                                 *term-program*
-                                                                                 ))
-                                                          :environment '(("TERM" . "xterm-256color")
-                                                                         ("LINES" . "24")
-                                                                         ("COLUMNS" . "80")
-                                                                         ;("LANG" . "en_US.UTF-8")
-                                                                         ))
+                                pty-stream (make-instance
+                                            'pty-stream
+                                            :command (list "/bin/sh" "-c"
+                                                           (string-append
+                                                            "stty sane rows 24 columns 80 echo icrnl iutf8 > /dev/null; export LC_CTYPE=UTF-8 COLORFGBG=15\\;0 COLORTERM=truecolor; "
+                                                            *term-program*))
+                                            :environment '(("TERM" . "xterm-256color")
+                                                           ("LINES" . "24")
+                                                           ("COLUMNS" . "80")))
                                 relay-process (mp:process-run-function
                                                "Term Relay" ()
                                                (lambda ()
@@ -580,6 +623,7 @@
                                                                (editor:move-point (editor:buffer-point buffer)
                                                                                   (slot-value escaped-output-stream 'cur)))
                                                              (capi:editor-window pane))
+                                                            (princ char)
                                                        else do (return))))))))
    :destroy-callback (lambda (pane)
                        (with-slots (relay-process pty-stream escaped-output-stream) pane
