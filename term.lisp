@@ -6,7 +6,8 @@
 
 ;; This file includes three parts:
 ;; 1. A stream connected to an Editor buffer, called
-;;    ESCAPED-EDITOR-STREAM, which support ANSI escape sequences;
+;;    ESCAPED-EDITOR-STREAM, which support XTerm-style ANSI escape
+;;    sequences
 ;; 2. A real PTY stream called PTY-STREAM, which will open a
 ;;    pseudo-tty process on Unix and connects to it;
 ;; 3. A sample CAPI:EDITOR subclass called PTY-PANE, which combines
@@ -28,9 +29,16 @@
   (:add-use-defaults))
 (in-package :lw-term)
 
-(defvar *term-program* (environment-variable "SHELL"))
+;; Color definitions
 
-(defvar *4-bit-colors* (make-array 98))
+(defvar *term-program* (environment-variable "SHELL")
+  "Default shell program for PTY-PANE. Defaults to $SHELL.")
+
+(defvar *4-bit-colors* (make-array 98)
+  "4-bit colors for terminal.
+
+Index 30-37 are normal colors, and 90-97 are bright colors. Indexed
+with CSI foreground code, shift -10 to get background.")
 
 (loop for i from 30
       for spec in (list (color:make-rgb 0   0   0)
@@ -54,7 +62,8 @@
                         (color:make-rgb 1   1   1))
       do (setf (aref *4-bit-colors* i) spec))
 
-(defvar *8-bit-colors* (make-array 256))
+(defvar *8-bit-colors* (make-array 256)
+  "8-bit (256) colors for terminal.")
 
 (loop for i from 0
       for spec in (list (color:make-rgb 0   0   0)
@@ -86,6 +95,8 @@
       for level from 1/32 to 119/128 by 5/128
       do (setf (aref *8-bit-colors* i) (color:make-gray level)))
 
+;; Helper functions
+
 (defun point-linenum (point)
   (editor:count-lines (editor:buffers-start (editor:point-buffer point)) point))
 
@@ -114,15 +125,23 @@
              (editor:insert-character point #\Newline)
              (editor::point-after point))))
 
+;; Escaped Editor Stream
+
 (defclass escaped-editor-stream
           (stream:fundamental-character-output-stream)
-  ((buffer :initarg :buffer)
-   (cur)
-   (lock :initform (mp:make-lock))
-   (face :initform (editor:make-face nil))
-   (pending-sequence :initform nil)
-   (width :initform 80 :initarg :width)
-   (height :initform 24 :initarg :height)))
+  ((buffer :initarg :buffer
+           :documentation "The Editor buffer bounded to the stream.")
+   (cur :documentation "EDITOR:POINT with :KIND :BEFORE-INSERT that represents current cursor of the terminal.")
+   (face :initform (editor:make-face nil)
+         :documentation "EDITOR:FACE representing current display attributes. Can be modified by SGR sequences.")
+   (pending-sequence :initform nil
+                     :documentation "Cached incomplete escaped sequence.")
+   (width :initform 80 :initarg :width
+          :documentation "Width of the terminal.")
+   (height :initform 24 :initarg :height
+           :documentation "Height of the terminal."))
+  (:documentation
+   "An output stream connects to an Editor buffer which can handle ANSI excaped sequence."))
 
 (export 'escaped-editor-stream)
 
@@ -130,6 +149,7 @@
   'character)
 
 (defmethod initialize-instance :around ((stream escaped-editor-stream) &key)
+  "Set the cursor, extend the buffer to the height of the terminal."
   (call-next-method)
   (with-slots (cur buffer height) stream
     ;(editor::set-buffer-contents buffer (make-string height :initial-element #\Newline))
@@ -138,7 +158,7 @@
     ))
 
 (defmethod stream:stream-write-char ((stream escaped-editor-stream) char)
-  (with-slots (buffer cur face pending-sequence lock width height) stream
+  (with-slots (buffer cur face pending-sequence width height) stream
     (let ((pt cur))
       (macrolet ((insert-char (char)
                    `(let ((str (editor::make-buffer-string
@@ -407,23 +427,13 @@
               (setf pending-sequence nil))))
          (t (insert-char char)))))))
 
+;; FLI C functions used in PTY-STREAM
+
 (fli:define-foreign-function (forkpty "forkpty")
     ((amaster (:ptr :int))
      (name :ptr)
      (termp :ptr)
      (winp :ptr))
-  :result-type :int)
-
-(fli:define-foreign-function (openpty "openpty")
-    ((amaster (:ptr :int))
-     (aslave :ptr)
-     (name :ptr)
-     (termp :ptr)
-     (winp :ptr))
-  :result-type :int)
-
-(fli:define-foreign-function (login-tty "login_tty")
-    ((fd :int))
   :result-type :int)
 
 (fli:define-foreign-function (fd-read "read")
@@ -453,23 +463,31 @@
      (envp :ptr))
   :result-type :int)
 
-(defconstant +sigterm+ 15)
+(defconstant +sigterm+ 15
+  "SIGTERM enum value")
+
+;; PTY Stream
 
 (defclass pty-stream (stream:fundamental-binary-input-stream
                       stream:fundamental-binary-output-stream
                       stream:fundamental-character-input-stream
                       stream:fundamental-character-output-stream)
-  ((pty-process)
-   (master-fd)
-   (master-pid)
+  ((pty-process :documentation "The process that starts forks out the PTY hand handling file descriptors.")
+   (master-fd :documentation "PTY Master file descriptor.")
+   (master-pid :documentation "PTY master process PID returned by forkpty()")
    (command :initform '("/bin/sh")
-            :initarg :command)
+            :initarg :command
+            :documentation "A list of commands that will be executed in the new PTY process with execve()")
    (environment :initform nil
-                :initarg :environment)
+                :initarg :environment
+                :documentation "Environment variables for execve()")
    (ctype :initform "UTF-8"
-          :initarg :ctype)))
+          :initarg :ctype
+          :documentation "Stream character type, same with the LC_CTYPE. Only support UTF-8 and latin1 currently."))
+  (:documentation "A character & binary IO stream that connects with a real Unix pseudo-tty using forkpty()"))
 
 (defmethod initialize-instance :around ((stream pty-stream) &key)
+  "Start the PTY"
   (call-next-method)
   (with-slots (command environment ctype) stream
     (setf (slot-value stream 'pty-process)
@@ -487,6 +505,7 @@
                      (let ((pid (forkpty amaster nil nil nil)))
                        (cond ((minusp pid) (error "Failed when executing openpty()"))
                              ((zerop pid)
+                              ; in new process
                               (let ((args (fli:allocate-foreign-object
                                            :type :ptr 
                                            :initial-contents (mapcar #'fli:convert-to-foreign-string command)))
@@ -497,11 +516,13 @@
                                                                        (loop for (name . value) in environment
                                                                              collect (string-append name "=" value)))))))
                                 (execve (fli:dereference args :index 0) args envp)))
+                             ; in original process
                              (t (setf (slot-value stream 'master-pid) pid))))
                      (setf (slot-value stream 'master-fd) (fli:dereference amaster)))
                  (fli:free amaster))))))))
 
 (defmethod stream:stream-read-byte ((stream pty-stream))
+  "Read one byte from PTY-STREAM using C's read()"
   (loop until (slot-boundp stream 'master-fd)
         do (sleep 0.01))
   (let ((c (fli:allocate-foreign-object :type '(:unsigned :byte))))
@@ -513,6 +534,7 @@
       (fli:free c))))
 
 (defmethod stream:stream-write-byte ((stream pty-stream) byte)
+  "Write one byte from PTY-STREAM using C's write()"
   (loop until (slot-boundp stream 'master-fd)
         do (sleep 0.01))
   (let ((c (fli:allocate-foreign-object :type '(:unsigned :byte) :initial-element byte)))
@@ -530,6 +552,7 @@
       (let ((first-byte (stream:stream-read-byte stream)))
         (if (not (fixnump first-byte)) :eof
           (let ((sign (floor first-byte 16)))
+            ;; Treat #x08 - #x0B as latin-1 supplement, although they're illegal in UTF-8...
             (if (< sign #xC) (code-char first-byte)
               (let ((lst (list first-byte)))
                 (when (<= sign #xD)
@@ -562,7 +585,7 @@
   (declare (ignore abort))
   (mp:process-terminate (slot-value stream 'pty-process)))
 
-
+;; PTY Pane
 
 (defclass pty-pane (capi:editor-pane)
   ((pty-stream :initform nil)
@@ -623,7 +646,6 @@
                                                                (editor:move-point (editor:buffer-point buffer)
                                                                                   (slot-value escaped-output-stream 'cur)))
                                                              (capi:editor-window pane))
-                                                            (princ char)
                                                        else do (return))))))))
    :destroy-callback (lambda (pane)
                        (with-slots (relay-process pty-stream escaped-output-stream) pane
