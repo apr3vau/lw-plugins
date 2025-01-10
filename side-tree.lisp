@@ -552,11 +552,15 @@ KIND is the KIND property of the entry.")
   (let ((point    (buffer-point buffer))
         (projects (workspace-projects workspace)))
     (if projects
-      (loop for i from 0
-            for project in projects
-            do (insert-project point project (when expand-first (zerop i)))
-               (buffer-end point)
-               (insert-character point #\Newline))
+      (let ((i 0))
+        (dolist (project projects)
+          (when (probe-file (project-path project))
+            (insert-project point project (when expand-first (zerop i)))
+            (buffer-end point)
+            (insert-character point #\Newline)
+            (incf i)))
+        (when (< i (length projects))
+          (message "~A project is missing on the disk. Delete them if they will not be used." (- (length projects) i))))
       (insert-string point (format nil "No project in workspace.~%~%Run \"Side Tree Add Project\"~%to add one.")))))
 
 ;; Buffer and window
