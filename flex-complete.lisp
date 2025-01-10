@@ -70,7 +70,7 @@ TARGET in the SOURCE. Otherwise return NIL."
     (case (length split)
       ;; No colon: current package's internals + other packages' (except KEYWORD) externals
       (1 (setq internal-packages (list current-package)
-               external-packages (set-difference (list-all-packages) (list (find-package "KEYWORD") current-package))))
+               external-packages (remove (find-package "KEYWORD") (list-all-packages))))
       ;; One colon: All packages' externals
       (2 (setq external-packages (list-all-packages)))
       ;; Two colons: Only matched package's internals
