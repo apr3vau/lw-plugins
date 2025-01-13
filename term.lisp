@@ -421,7 +421,7 @@ corresponding location."
               (editor::move-to-column pt 0)
               (let ((count (if (and param1 (plusp param1)) param1 1)))
                 (editor:with-point ((end pt))
-                  (editor:line-offset pt count 0)
+                  (editor:line-offset end count 0)
                   (editor:delete-between-points pt end)
                   (editor:buffer-end end)
                   (editor:insert-string end (make-string count :initial-element #\Newline))))
@@ -445,7 +445,7 @@ corresponding location."
                 (22 (setface :bold-p nil))
                 (23 (setface :italic-p nil))
                 (24 (setface :underline-p nil))
-                    
+                
                 ((or 38 48) (case (pop csi-params)
                               (5 (go 8-bit))
                               (2 (go 24-bit))))
@@ -541,36 +541,27 @@ corresponding location."
   "Start the PTY"
   (call-next-method)
   (with-slots (command environment ctype) stream
-    (setf (slot-value stream 'pty-process)
-          (mp:process-run-function
-           "PTY process" (list :local-terminator
-                               (lambda ()
-                                 (when (minusp (fd-close (slot-value stream 'master-fd)))
-                                   (error "Failed when executing close()"))
-                                 (when (minusp (pkill (slot-value stream 'master-pid) +sigterm+))
-                                   (error "Failed when executing kill()"))))
-           (lambda ()
-             (let ((amaster (fli:allocate-foreign-object :type :int)))
-               (unwind-protect
-                   (progn
-                     (let ((pid (forkpty amaster nil nil nil)))
-                       (cond ((minusp pid) (error "Failed when executing openpty()"))
-                             ((zerop pid)
-                              ; in new process
-                              (let ((args (fli:allocate-foreign-object
-                                           :type :ptr 
-                                           :initial-contents (mapcar #'fli:convert-to-foreign-string command)))
-                                    (envp (when environment
-                                            (fli:allocate-foreign-object
-                                             :type :ptr
-                                             :initial-contents (mapcar #'fli:convert-to-foreign-string
-                                                                       (loop for (name . value) in environment
-                                                                             collect (string-append name "=" value)))))))
-                                (execve (fli:dereference args :index 0) args envp)))
-                             ; in original process
-                             (t (setf (slot-value stream 'master-pid) pid))))
-                     (setf (slot-value stream 'master-fd) (fli:dereference amaster)))
-                 (fli:free amaster))))))))
+    (let ((amaster (fli:allocate-foreign-object :type :int)))
+      (unwind-protect
+          (progn
+            (let ((pid (forkpty amaster nil nil nil)))
+              (cond ((minusp pid) (error "Failed when executing forkpty()"))
+                    ((zerop pid)
+                     ;; in new process
+                     (let ((args (fli:allocate-foreign-object
+                                  :type :ptr 
+                                  :initial-contents (mapcar #'fli:convert-to-foreign-string command)))
+                           (envp (when environment
+                                   (fli:allocate-foreign-object
+                                    :type :ptr
+                                    :initial-contents (mapcar #'fli:convert-to-foreign-string
+                                                              (loop for (name . value) in environment
+                                                                    collect (string-append name "=" value)))))))
+                       (execve (fli:dereference args :index 0) args envp)))
+                    ;; in main process
+                    (t (setf (slot-value stream 'master-pid) pid))))
+            (setf (slot-value stream 'master-fd) (fli:dereference amaster)))
+        (fli:free amaster)))))
 
 (defmethod stream:stream-read-byte ((stream pty-stream))
   "Read one byte from PTY-STREAM using C's read()"
@@ -592,7 +583,7 @@ corresponding location."
     (unwind-protect
         (let ((ret (fd-write (slot-value stream 'master-fd) c 1)))
           (cond ((minusp ret) (error "Failed when executing write()"))
-                ((zerop ret) (error "~A has reached EOF" stream))
+                ((zerop ret) :eof)
                 (t byte)))
       (fli:free c))))
 
@@ -634,7 +625,10 @@ corresponding location."
 
 (defmethod close ((stream pty-stream) &key abort)
   (declare (ignore abort))
-  (mp:process-terminate (slot-value stream 'pty-process)))
+  (when (minusp (pkill (slot-value stream 'master-pid) +sigterm+))
+    (error "Failed when executing kill()"))
+  (when (minusp (fd-close (slot-value stream 'master-fd)))
+    (error "Failed when executing close()")))
 
 ;; PTY Pane
 
@@ -682,7 +676,8 @@ corresponding location."
                                             :command (list "/bin/sh" "-c"
                                                            (string-append
                                                             "stty sane rows 24 columns 80 echo icrnl iutf8 > /dev/null; export LC_CTYPE=UTF-8 COLORFGBG=15\\;0 COLORTERM=truecolor; "
-                                                            *term-program*))
+                                                            *term-program*
+                                                            ))
                                             :environment '(("TERM" . "xterm-256color")
                                                            ("LINES" . "24")
                                                            ("COLUMNS" . "80")))
@@ -700,8 +695,8 @@ corresponding location."
                                                        else do (return))))))))
    :destroy-callback (lambda (pane)
                        (with-slots (relay-process pty-stream escaped-output-stream) pane
-                         (mp:process-kill relay-process)
                          (close pty-stream)
+                         (mp:process-kill relay-process)
                          (close escaped-output-stream)))))
 
 ;(capi:contain (make-instance 'pty-pane))
