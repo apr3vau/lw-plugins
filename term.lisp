@@ -97,21 +97,23 @@ with CSI foreground code, shift -10 to get background.")
 
 ;; Helper functions
 
-(defun point-linenum (point)
-  (editor:count-lines (editor:buffers-start (editor:point-buffer point)) point))
-
 (defun count-lines-after (point)
+  "Count how many Newline characters there are after POINT."
   (editor:count-lines point (editor:buffers-end (editor:point-buffer point))))
 
 (defun char-digit (char)
+  "Convert digit character to fixnum."
   (declare (inline char-digit))
   (- (char-code char) 48))
 
 (defun char-st-p (char)
+  "Check if character is one of terminal ST character"
   (declare (inline char-st-p))
   (member (char-code char) '(#x9C #x1B #x5C)))
 
 (defun ensure-move-to-column (point column)
+  "Move POINT to COLUMN, if current line is shorter than COLUMN,
+insert space at the end of the line."
   (unless (editor::move-to-column point column)
     (editor:line-end point)
     (let ((count (- column (editor:point-column point))))
@@ -119,11 +121,19 @@ with CSI foreground code, shift -10 to get background.")
       (editor:character-offset point count))))
 
 (defun ensure-line-offset (point offset)
-  (loop repeat offset
-        do (unless (editor:line-offset point 1)
-             (editor:line-end point)
-             (editor:insert-character point #\Newline)
-             (editor::point-after point))))
+  "Move POINT to OFFSET lines relative to current location. if the
+buffer is has shorter line than required, extend buffer at
+corresponding location."
+  (if (plusp offset)
+    (loop repeat offset
+          do (unless (editor:line-offset point 1)
+               (editor:line-end point)
+               (editor:insert-character point #\Newline)
+               (editor::point-after point)))
+    (loop repeat offset
+          do (unless (editor:line-offset point -1)
+               (editor:line-start point)
+               (editor:insert-character point #\Newline)))))
 
 ;; Escaped Editor Stream
 
