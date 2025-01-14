@@ -17,10 +17,10 @@
 ;; Features:
 ;; - 4-bit, 8-bit and 24-bit color render
 ;; - ISO8859-1 and UTF-8 support
-;; - Running simple TUI programs like Nano and Vim.
 
-;; Limitations & TODOs
+;; TODOs
 ;; - More control sequences
+;; - Mouse support (?)
 ;; - Constraint the Editor pane to fit the terminal better
 ;; - Optimization
 ;; - More tests
@@ -31,7 +31,7 @@
 
 ;; Color definitions
 
-(defvar *term-program* (environment-variable "SHELL")
+(defvar *term-program* (or (environment-variable "SHELL") "/bin/sh")
   "Default shell program for PTY-PANE. Defaults to $SHELL.")
 
 (defvar *4-bit-colors* (make-array 98)
@@ -149,7 +149,8 @@ corresponding location."
    (width :initform 80 :initarg :width
           :documentation "Width of the terminal.")
    (height :initform 24 :initarg :height
-           :documentation "Height of the terminal."))
+           :documentation "Height of the terminal.")
+   (cursor-visible :initform t))
   (:documentation
    "An output stream connects to an Editor buffer which can handle ANSI excaped sequence."))
 
@@ -167,9 +168,15 @@ corresponding location."
     (editor:insert-string cur (make-string (1- height) :initial-element #\Newline))
     ))
 
+;; References:
+;; http://www.xfree86.org/4.7.0/ctlseqs.html
+;; https://terminalguide.namepad.de
 (defmethod stream:stream-write-char ((stream escaped-editor-stream) char)
-  (with-slots (buffer cur face pending-sequence width height) stream
-    (let ((pt cur))
+  (with-slots (pending-sequence face cursor-visible) stream
+    (let ((pt               (slot-value stream 'cur))
+          (buffer           (slot-value stream 'buffer))
+          (width            (slot-value stream 'width))
+          (height           (slot-value stream 'height)))
       (labels ((insert-char (char)
                  (let ((str (editor::make-buffer-string
                              :%string (string char)
@@ -180,13 +187,13 @@ corresponding location."
                      (editor::insert-buffer-string pt str))
                    (editor::point-after pt)))
                (setface (key val)
-                 (let ((props (list :bold-p (editor::face-bold-p face)
-                                    :italic-p (editor::face-italic-p face)
+                 (let ((props (list :bold-p      (editor::face-bold-p face)
+                                    :italic-p    (editor::face-italic-p face)
                                     :underline-p (editor::face-underline-p face)
-                                    :inverse-p (editor::face-inverse-p face)
-                                    :foreground (editor::face-foreground face)
-                                    :background (editor::face-background face)
-                                    :font (editor::face-font face))))
+                                    :inverse-p   (editor::face-inverse-p face)
+                                    :foreground  (editor::face-foreground face)
+                                    :background  (editor::face-background face)
+                                    :font        (editor::face-font face))))
                    (setf (getf props key) val
                          face (apply #'editor:make-face nil props))))
                (erase-line-before (pt)
@@ -249,7 +256,8 @@ corresponding location."
             (prog ((pending (cdr pending-sequence))
                    csi-params
                    param1
-                   current-param)
+                   current-param
+                   ?-mode)
               (case (pop pending)
                 (nil (return))
                 (#\[ (go csi-get-param))
@@ -263,6 +271,10 @@ corresponding location."
                                              (+ (* 10 current-param) (char-digit (pop pending)))
                                              (char-digit (pop pending))))
                      
+                       (go csi-get-param))
+                      ((eql c #\?)
+                       (setq ?-mode t)
+                       (pop pending)
                        (go csi-get-param))
                       ((eql c #\;)
                        (pop pending)
@@ -287,26 +299,30 @@ corresponding location."
               csi-term
               (push-end current-param csi-params)
               (setq param1 (first csi-params))
-              (case (pop pending)
-                (nil (return))
-                (#\Null (go ich))
-                (#\A (go cuu))
-                (#\B (go cud))
-                (#\C (go cuf))
-                (#\D (go cub))
-                (#\E (go cnl))
-                (#\F (go cpl))
-                (#\G (go cha))
-                ((or #\H #\f) (go cup))
-                (#\I (go cht))
-                (#\J (go ed))
-                (#\K (go el))
-                (#\L (go il))
-                (#\M (go dl))
-                (#\d (go vpa))
-                (#\m (go sgr))
-                (#\Tilde (go tilde))
-                (t (go finish)))
+              (if ?-mode
+                (case (pop pending)
+                  (#\h (go decset))
+                  (#\l (go decrst)))
+                (case (pop pending)
+                  (nil (return))
+                  (#\Null (go ich))
+                  (#\A (go cuu))
+                  (#\B (go cud))
+                  (#\C (go cuf))
+                  (#\D (go cub))
+                  (#\E (go cnl))
+                  (#\F (go cpl))
+                  (#\G (go cha))
+                  ((or #\H #\f) (go cup))
+                  (#\I (go cht))
+                  (#\J (go ed))
+                  (#\K (go el))
+                  (#\L (go il))
+                  (#\M (go dl))
+                  (#\d (go vpa))
+                  (#\m (go sgr))
+                  (#\Tilde (go tilde))))
+              (go finish)
               osc-term
               (push-end current-param csi-params)
               (setq param1 (first csi-params))
@@ -315,6 +331,16 @@ corresponding location."
                ((equal param1 "10") (when (equal (second csi-params) "?") "[97m"))
                ((equal param1 "11") (when (equal (second csi-params) "?") "[40m"))
                (t (go finish)))
+              decset
+              (setq param1 (pop csi-params))
+              (case param1
+                (25 (setf cursor-visible t)))
+              (if csi-params (go decset) (go finish))
+              decrst
+              (setq param1 (pop csi-params))
+              (case param1
+                (25 (setf cursor-visible nil)))
+              (if csi-params (go decrst) (go finish))
               ich
               (editor::insert-spaces pt (if (and param1 (plusp param1)) param1 1))
               (go finish)
@@ -476,7 +502,14 @@ corresponding location."
                      (editor::delete-characters pt 1))))
               finish
               (setf pending-sequence nil))))
-         (t (insert-char char)))))))
+         (t (insert-char char))))
+      (when cursor-visible
+        (when-let (window (first (editor:buffer-windows buffer)))
+          (when (editor::window-alive-p window)
+            (editor:process-character
+             (lambda (p) (declare (ignore p))
+               (editor:move-point (editor:buffer-point buffer) pt))
+             window)))))))
 
 ;; FLI C functions used in PTY-STREAM
 
@@ -644,8 +677,12 @@ corresponding location."
    `((:gesture-spec ,(lambda (pane x y spec)
                        (declare (ignore x y))
                        (with-slots (pty-stream) pane
+                         (char-code #\Backspace)
                          (let* ((data (sys:gesture-spec-data spec))
                                 (char (code-char data)))
+                           (when (eql char #\Backspace)
+                             (setq char #\Rubout))
+                           (prin1 char)
                            (case (sys:gesture-spec-modifiers spec)
                              (0 (write-char char pty-stream))
                              (2 (if (alpha-char-p char)
@@ -658,7 +695,8 @@ corresponding location."
                                     (#\\ (write-char #\FS pty-stream))
                                     (#\] (write-char #\GS pty-stream))
                                     (#\6 (write-char #\RS pty-stream))
-                                    (#\- (write-char #\US pty-stream)))))
+                                    (#\- (write-char #\US pty-stream))
+                                    (#\/ (write-char #\US pty-stream)))))
                              (1 (format pty-stream "[~A;~A~~" data 1))
                              (3 (format pty-stream "[~A;~A~~" data 6))
                              (6 (format pty-stream "[~A;~A~~" data 7))
@@ -685,13 +723,7 @@ corresponding location."
                                                "Term Relay" ()
                                                (lambda ()
                                                  (loop for char = (read-char pty-stream nil)
-                                                       if char
-                                                         do (write-char char escaped-output-stream)
-                                                            (editor:process-character
-                                                             (lambda (p) (declare (ignore p))
-                                                               (editor:move-point (editor:buffer-point buffer)
-                                                                                  (slot-value escaped-output-stream 'cur)))
-                                                             (capi:editor-window pane))
+                                                       if char do (write-char char escaped-output-stream)
                                                        else do (return))))))))
    :destroy-callback (lambda (pane)
                        (with-slots (relay-process pty-stream escaped-output-stream) pane
