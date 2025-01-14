@@ -245,6 +245,17 @@ corresponding location."
             (editor::delete-characters pt -1)))
          ((eql char #\Bell) (capi:beep-pane))
          ((eql char #\Backspace) (editor::point-before pt))
+         ((eql char #\Tab)
+          (editor::insert-buffer-string
+           pt
+           (editor::make-buffer-string :%string "	" :properties `((0 1 (editor:face ,face)))))
+          (editor::point-after pt)
+          (editor:with-point ((end pt))
+            (editor:line-end end)
+            (editor::delete-characters
+             pt
+             (min (editor:variable-value 'editor:spaces-for-tab :global)
+                  (- (editor:point-column end) (editor:point-column pt))))))
          (pending-sequence
           (push-end char pending-sequence)
           (when (or (alpha-char-p char)
@@ -661,6 +672,41 @@ corresponding location."
 
 ;; PTY Pane
 
+(defun pty-pane-gesture (pane x y spec)
+  (declare (ignore x y))
+                       (with-slots (pty-stream) pane
+                         (char-code #\Backspace)
+                         (let* ((data (sys:gesture-spec-data spec))
+                                (mod (case (sys:gesture-spec-modifiers spec)
+                                       (0 0) (1 2) (2 5) (3 6)
+                                       (6 7) (4 9) (5 10) (7 14))))
+                           (if (fixnump data)
+                             (let ((char (code-char data)))
+                               (when (eql char #\Backspace)
+                                 (setq char #\Rubout))
+                               (case mod
+                                 (0 (write-char char pty-stream))
+                                 (5 (if (alpha-char-p char)
+                                      (if (upper-case-p char)
+                                        (write-byte (- data 64) pty-stream)
+                                        (write-byte (- data 96) pty-stream))
+                                      (case char
+                                        (#\@ (write-char #\Null pty-stream))
+                                        (#\[ (write-char #\Escape pty-stream))
+                                        (#\\ (write-char #\FS pty-stream))
+                                        (#\] (write-char #\GS pty-stream))
+                                        (#\6 (write-char #\RS pty-stream))
+                                        (#\- (write-char #\US pty-stream))
+                                        (#\/ (write-char #\US pty-stream)))))
+                                 (t (format pty-stream "[~A;~A~~" mod data))))
+                             (format pty-stream "[~A~C" (if (zerop mod) "" mod)
+                                     (case data
+                                       (:up #\A) (:down #\B) (:right #\C) (:left #\D)
+                                       (:home #\H) (:end #\F)
+                                       (:f1 #\P) (:f2 #\Q) (:f3 #\R) (:f4 #\S)))))
+                         (format nil "~16R" (char-code #\Escape))
+                         (force-output pty-stream)))
+
 (defclass pty-pane (capi:editor-pane)
   ((pty-stream :initform nil)
    (escaped-output-stream :initform nil)
@@ -669,37 +715,7 @@ corresponding location."
    :buffer :temp
    :visible-min-width '(character 83)
    :visible-min-height '(character 24)
-   :input-model
-   `((:gesture-spec ,(lambda (pane x y spec)
-                       (declare (ignore x y))
-                       (with-slots (pty-stream) pane
-                         (char-code #\Backspace)
-                         (let* ((data (sys:gesture-spec-data spec))
-                                (char (code-char data)))
-                           (when (eql char #\Backspace)
-                             (setq char #\Rubout))
-                           (case (sys:gesture-spec-modifiers spec)
-                             (0 (write-char char pty-stream))
-                             (2 (if (alpha-char-p char)
-                                  (if (upper-case-p char)
-                                    (write-byte (- data 64) pty-stream)
-                                    (write-byte (- data 96) pty-stream))
-                                  (case char
-                                    (#\@ (write-char #\Null pty-stream))
-                                    (#\[ (write-char #\Escape pty-stream))
-                                    (#\\ (write-char #\FS pty-stream))
-                                    (#\] (write-char #\GS pty-stream))
-                                    (#\6 (write-char #\RS pty-stream))
-                                    (#\- (write-char #\US pty-stream))
-                                    (#\/ (write-char #\US pty-stream)))))
-                             (1 (format pty-stream "[~A;~A~~" data 1))
-                             (3 (format pty-stream "[~A;~A~~" data 6))
-                             (6 (format pty-stream "[~A;~A~~" data 7))
-                             (4 (format pty-stream "[~A;~A~~" data 9))
-                             (5 (format pty-stream "[~A;~A~~" data 10))
-                             (7 (format pty-stream "[~A;~A~~" data 14))))
-                         (format nil "~16R" (char-code #\Escape))
-                         (force-output pty-stream)))))
+   :input-model '((:gesture-spec pty-pane-gesture))
    :create-callback (lambda (pane)
                       (with-slots (pty-stream escaped-output-stream relay-process) pane
                         (let ((buffer (capi:editor-pane-buffer pane)))
