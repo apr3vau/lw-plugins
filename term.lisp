@@ -137,11 +137,15 @@ corresponding location."
 
 ;; Escaped Editor Stream
 
+;; References:
+;; http://www.xfree86.org/4.7.0/ctlseqs.html
+;; https://terminalguide.namepad.de
+
 (defclass escaped-editor-stream
           (stream:fundamental-character-output-stream)
   ((buffer :initarg :buffer
            :documentation "The Editor buffer bounded to the stream.")
-   (cur :documentation "EDITOR:POINT with :KIND :BEFORE-INSERT that represents current cursor of the terminal.")
+   (pt :documentation "EDITOR:POINT with :KIND :BEFORE-INSERT that represents current cursor of the terminal.")
    (face :initform (editor:make-face nil)
          :documentation "EDITOR:FACE representing current display attributes. Can be modified by SGR sequences.")
    (pending-sequence :initform nil
@@ -162,41 +166,157 @@ corresponding location."
 (defmethod initialize-instance :around ((stream escaped-editor-stream) &key)
   "Set the cursor, extend the buffer to the height of the terminal."
   (call-next-method)
-  (with-slots (cur buffer height) stream
+  (with-slots (pt buffer height) stream
     ;(editor::set-buffer-contents buffer (make-string height :initial-element #\Newline))
-    (setf cur (editor:copy-point (editor:buffer-point buffer) :before-insert))
-    (editor:insert-string cur (make-string (1- height) :initial-element #\Newline))
+    (setf pt (editor:copy-point (editor:buffer-point buffer) :before-insert))
+    (editor:insert-string pt (make-string (1- height) :initial-element #\Newline))
     ))
 
-;; References:
-;; http://www.xfree86.org/4.7.0/ctlseqs.html
-;; https://terminalguide.namepad.de
-(defmethod stream:stream-write-char ((stream escaped-editor-stream) char)
-  (with-slots (pending-sequence face cursor-visible) stream
-    (let ((pt               (slot-value stream 'cur))
-          (buffer           (slot-value stream 'buffer))
-          (width            (slot-value stream 'width))
-          (height           (slot-value stream 'height)))
-      (labels ((insert-char (char)
-                 (let ((str (editor::make-buffer-string
-                             :%string (string char)
-                             :properties `((0 1 (editor:face ,face)))))
-                       (c (editor:character-at pt 0)))
-                   (if (and c (not (eql c #\Newline)))
-                     (editor::big-replace-string pt str 1)
-                     (editor::insert-buffer-string pt str))
-                   (editor::point-after pt)))
-               (setface (key val)
-                 (let ((props (list :bold-p      (editor::face-bold-p face)
-                                    :italic-p    (editor::face-italic-p face)
-                                    :underline-p (editor::face-underline-p face)
-                                    :inverse-p   (editor::face-inverse-p face)
-                                    :foreground  (editor::face-foreground face)
-                                    :background  (editor::face-background face)
-                                    :font        (editor::face-font face))))
-                   (setf (getf props key) val
-                         face (apply #'editor:make-face nil props))))
-               (erase-line-before (pt)
+(defmacro insert-char-with-props (point char props)
+  "Insert a character with property PROPS, overwrite if possible.
+
+Used inside the ESCAPED-EDITOR-STREAM."
+  `(let ((str (editor::make-buffer-string
+               :%string (string ,char)
+               :properties `((0 1 ,,props))))
+         (c (editor:character-at ,point 0)))
+     (if (and c (not (eql c #\Newline)))
+       (editor::big-replace-string ,point str 1)
+       (editor::insert-buffer-string ,point str))
+     (editor::point-after ,point)))
+
+(defun escaped-stream-set-cursor (stream)
+  "Set the Editor buffer point to the position of terminal cursor.
+If CURSOR-VISIBLE is NIL, suspend this behaviour."
+  ;; We noticed that TUI programs will set cursor not visible before
+  ;; do a lot of drawing. That's very smart, as from the profiling
+  ;; result, moving visible cursor is costly compared with other
+  ;; actions.
+  
+  ;; And there seems no way to "hide" the buffer point in LW Editor...
+  (with-slots (buffer pt cursor-visible) stream
+    (when cursor-visible
+      (when-let (window (first (editor:buffer-windows buffer)))
+        (editor:process-character
+         (lambda (p)
+           (declare (ignore p))
+           (when (editor::window-alive-p window)
+             (editor:move-point (editor:buffer-point buffer) pt)))
+         window)))))
+
+(defun escaped-stream-insert-char (stream char)
+  "Insert a character to the Editor buffer associated with STREAM."
+  (with-slots (face width) stream
+    (let ((pt (slot-value stream 'pt)))
+      (case char
+        (#\Bell (capi:beep-pane))
+        (#\Backspace (editor::point-before pt))
+        (#\Tab
+         (let* ((col (editor:point-column pt))
+                (tab-spaces (editor:variable-value 'editor:spaces-for-tab :global))
+                (space-count (mod col tab-spaces)))
+           (when (zerop space-count)
+             (setq space-count tab-spaces))
+           (insert-char-with-props pt #\Tab `(editor:face ,face))
+           (editor:with-point ((end pt))
+             (editor:line-end end)
+             (editor::delete-characters
+              pt
+              (min space-count (- (editor:point-column end) col))))))
+        (#\Newline
+         (let ((col (editor:point-column pt)))
+           (ensure-line-offset pt 1)
+           (ensure-move-to-column pt col)))
+        (#\Return
+         (editor:line-start pt))
+        (#\Rubout
+         (if (= (editor:point-column pt) 0)
+           (when (< (count-lines-after pt) 80)
+             (editor::point-before pt)
+             (ensure-move-to-column pt (1- width)))
+           (editor::delete-characters pt -1)))
+        (#\Escape
+         (insert-char-with-props pt #\Tab `(editor:face ,face)))
+        (t (insert-char-with-props pt char `(editor:face ,face))))
+      (escaped-stream-set-cursor stream))))
+
+(defun escaped-stream-set-face (stream key val)
+  "Modify an aspect of the current face of STREAM."
+  (let* ((face (slot-value stream 'face))
+         (props (list :bold-p      (editor::face-bold-p face)
+                      :italic-p    (editor::face-italic-p face)
+                      :underline-p (editor::face-underline-p face)
+                      :inverse-p   (editor::face-inverse-p face)
+                      :foreground  (editor::face-foreground face)
+                      :background  (editor::face-background face)
+                      :font        (editor::face-font face))))
+    (setf (getf props key) val
+          (slot-value stream 'face) (apply #'editor:make-face nil props))))
+
+(defun escaped-stream-handle-sgr (stream params)
+  "Handle SGR control sequences."
+  (prog (param1)
+    start
+    (setq param1 (or (pop params) 0))
+    (case param1
+      (0 (setf (slot-value stream 'face) (editor:make-face nil)))
+      (1 (escaped-stream-set-face stream :bold-p t))
+      (3 (escaped-stream-set-face stream :italic-p t))
+      (4 (escaped-stream-set-face stream :underline-p t))
+      (7 (escaped-stream-set-face stream :inverse-p t))
+      (27 (escaped-stream-set-face stream :inverse-p nil))
+      (22 (escaped-stream-set-face stream :bold-p nil))
+      (23 (escaped-stream-set-face stream :italic-p nil))
+      (24 (escaped-stream-set-face stream :underline-p nil))
+      ;; Colors
+      ((or 38 48) (case (pop params)
+                    (5 (go 8-bit))
+                    (2 (go 24-bit))))
+      (39 (escaped-stream-set-face stream :foreground nil))
+      (49 (escaped-stream-set-face stream :background nil))
+      ;; 4-bit
+      (t (cond ((or (<= 30 param1 37) (<= 90 param1 97))
+                (escaped-stream-set-face stream :foreground (aref *4-bit-colors* param1)))
+               ((or (<= 40 param1 47) (<= 100 param1 107))
+                (escaped-stream-set-face stream :background (aref *4-bit-colors* (- param1 10)))))))
+    (when params (go start))
+    (return)
+    8-bit
+    (escaped-stream-set-face stream (if (= param1 38) :foreground :background)
+                             (aref *8-bit-colors* (pop params)))
+    (if params (go start) (return))
+    24-bit
+    (escaped-stream-set-face stream (if (= param1 38) :foreground :background)
+                             (destructuring-bind (r g b) params
+                               (color:make-rgb (/ r 255) (/ g 255) (/ b 255))))
+    (setq params (cdddr params))
+    (if params (go start) (return))))
+
+(defun parse-csi-params (chars)
+  "Parse an array of characters to CSI parameters (merge digit
+characters into integers, mostly)."
+  (loop with num
+        for index fixnum from 2 to (1- (length chars))
+        for char character = (char chars index)
+        if (digit-char-p char)
+          if num do (setq num (+ (* num 10) (char-digit char)))
+          else do (setq num (char-digit char))
+        else
+          if (<= #x40 (char-code char) #x7E)
+            collect num and
+            do (loop-finish)
+          else
+            collect num and
+            do (setq num nil) and
+            unless (eql char #\;) collect char))
+
+(defun escaped-stream-handle-csi (stream)
+  "Handle CSI control sequences."
+  (with-slots (pending-sequence face width height buffer cursor-visible) stream
+    (let* ((params (parse-csi-params pending-sequence))
+           (param1 (first params))
+           (pt (slot-value stream 'pt)))
+      (labels ((erase-line-before (pt)
                  (editor:with-point ((start pt))
                    (let ((col (editor:point-column pt)))
                      (editor::big-replace-string
@@ -224,303 +344,162 @@ corresponding location."
                       (editor::make-buffer-string :%string (make-string width :initial-element #\Space)
                                                   :properties `((0 ,width (editor:face ,face)))))
                      (editor::move-to-column pt col)))))
-        (cond
-         ((eql char #\Escape)
-          (if (equal pending-sequence '(#\Escape))
-            (progn
-              (setf pending-sequence nil)
-              (insert-char #\Escape))
-            (push-end #\Escape pending-sequence)))
-         ((eql char #\Return)
-          (editor:line-start pt))
-         ((eql char #\Newline)
-          (let ((col (editor:point-column pt)))
-            (ensure-line-offset pt 1)
-            (ensure-move-to-column pt col)))
-         ((eql char #\Rubout)
-          (if (= (editor:point-column pt) 0)
-            (when (< (count-lines-after pt) 80)
-              (editor::point-before pt)
-              (ensure-line-offset pt (1- width)))
-            (editor::delete-characters pt -1)))
-         ((eql char #\Bell) (capi:beep-pane))
-         ((eql char #\Backspace) (editor::point-before pt))
-         ((eql char #\Tab)
-          (let* ((col (editor:point-column pt))
-                 (tab-spaces (editor:variable-value 'editor:spaces-for-tab :global))
-                 (space-count (mod col tab-spaces)))
-            (when (zerop space-count)
-              (setq space-count tab-spaces))
-            (editor::insert-buffer-string
-             pt
-             (editor::make-buffer-string :%string "	" :properties `((0 1 (editor:face ,face)))))
-            (editor::point-after pt)
-            (editor:with-point ((end pt))
-              (editor:line-end end)
-              (editor::delete-characters
-               pt
-               (min space-count (- (editor:point-column end) col))))))
-         (pending-sequence
-          (push-end char pending-sequence)
-          (when (or (alpha-char-p char)
-                    (eql char #\Tilde))
-            (prog ((pending (cdr pending-sequence))
-                   csi-params
-                   param1
-                   current-param
-                   ?-mode)
-              (case (pop pending)
-                (nil (return))
-                (#\[ (go csi-get-param))
-                (#\] (go osc-get-param))
-                (t (go finish)))
-              csi-get-param
-              (let ((c (car pending)))
-                (cond ((null c) (return))
-                      ((digit-char-p c)
-                       (setq current-param (if current-param
-                                             (+ (* 10 current-param) (char-digit (pop pending)))
-                                             (char-digit (pop pending))))
-                     
-                       (go csi-get-param))
-                      ((eql c #\?)
-                       (setq ?-mode t)
-                       (pop pending)
-                       (go csi-get-param))
-                      ((eql c #\;)
-                       (pop pending)
-                       (push-end (or current-param 0) csi-params)
-                       (setq current-param nil)
-                       (go csi-get-param))
-                      (t (go csi-term))))
-              osc-get-param
-              (let ((c (car pending)))
-                (cond ((null c) (return))
-                      ((eql c #\;)
-                       (pop pending)
-                       (push-end (or current-param 0) csi-params)
-                       (setq current-param nil)
-                       (go osc-get-param))
-                      ((or (char-st-p c) (eql c #\Bell))
-                       (go osc-term))
-                      (t (setq current-param (if current-param
-                                               (string (pop pending))
-                                               (string-append current-param (string (pop pending)))))
-                         (go osc-get-param))))
-              csi-term
-              (push-end current-param csi-params)
-              (setq param1 (first csi-params))
-              (if ?-mode
-                (case (pop pending)
-                  (#\h (go decset))
-                  (#\l (go decrst)))
-                (case (pop pending)
-                  (nil (return))
-                  (#\Null (go ich))
-                  (#\A (go cuu))
-                  (#\B (go cud))
-                  (#\C (go cuf))
-                  (#\D (go cub))
-                  (#\E (go cnl))
-                  (#\F (go cpl))
-                  (#\G (go cha))
-                  ((or #\H #\f) (go cup))
-                  (#\I (go cht))
-                  (#\J (go ed))
-                  (#\K (go el))
-                  (#\L (go il))
-                  (#\M (go dl))
-                  (#\d (go vpa))
-                  (#\m (go sgr))
-                  (#\Tilde (go tilde))))
-              (go finish)
-              osc-term
-              (push-end current-param csi-params)
-              (setq param1 (first csi-params))
-              (cond
-               ((null param1) (return))
-               ((equal param1 "10") (when (equal (second csi-params) "?") "[97m"))
-               ((equal param1 "11") (when (equal (second csi-params) "?") "[40m"))
-               (t (go finish)))
-              decset
-              (setq param1 (pop csi-params))
-              (case param1
-                (25 (setf cursor-visible t)))
-              (if csi-params (go decset) (go finish))
-              decrst
-              (setq param1 (pop csi-params))
-              (case param1
-                (25 (setf cursor-visible nil)))
-              (if csi-params (go decrst) (go finish))
-              ich
-              (editor::insert-spaces pt (if (and param1 (plusp param1)) param1 1))
-              (go finish)
-              cuu
-              (let ((col (editor:point-column pt)))
-                (loop repeat (if (and param1 (plusp param1)) param1 1)
-                      until (>= (count-lines-after pt) height)
-                      do (editor:line-offset pt -1))
-                (ensure-move-to-column pt col))
-              (go finish)
-              cud
-              (let ((col (editor:point-column pt)))
-                (let ((res t))
-                  (loop repeat (if (and param1 (plusp param1)) param1 1)
-                        until (null res)
-                        do (setq res (editor:line-offset pt 1))))
-                (ensure-move-to-column pt col))
-              (go finish)
-              cuf
-              (loop repeat (if (and param1 (plusp param1)) param1 1)
-                    until (>= (editor:point-column pt) width)
-                    if (eql (editor:character-at pt 0) #\Newline)
-                      do (editor:insert-character pt #\Space)
-                    else do (editor::point-after pt))
-              (go finish)
-              cub
-              (loop repeat (if (and param1 (plusp param1)) param1 1)
-                    until (= (editor:point-column pt) 0)
-                    do (editor::point-before pt))
-              (go finish)
-              cnl
-              (let ((res t))
-                (loop repeat (if (and param1 (plusp param1)) param1 1)
-                      until (null res)
-                      do (setq res (editor:line-offset pt 1))))
-              (ensure-move-to-column pt 0)
-              (go finish)
-              cpl
-              (loop repeat (if (and param1 (plusp param1)) param1 1)
-                    until (>= (count-lines-after pt) (1- height))
-                    do (editor:line-offset pt -1))
-              (editor::move-to-column pt 0)
-              (go finish)
-              cha (editor::move-to-column pt (or param1 1))
-              (go finish)
-              cup
-              (let ((param2 (second csi-params)))
-                (editor:buffer-end pt)
-                (unless (editor:line-offset pt (- (if (and param1 (plusp param1)) param1 1) height))
-                  (editor:buffer-start pt)
-                  (ensure-line-offset pt (1- height)))
-                (ensure-move-to-column pt (1- (if (and param2 (plusp param2)) param2 1))))
-              (go finish)
-              cht
-              (editor:insert-character pt (make-string (if (and param1 (plusp param1)) param1 1) :initial-element #\Tab))
-              (go finish)
-              ed (case (or param1 0)
-                   (0 (let ((lines-after (count-lines-after pt)))
-                        (editor:delete-between-points pt (editor:buffers-end buffer))
-                        (editor:insert-string pt (make-string lines-after :initial-element #\Newline)))
-                      (erase-line-after pt)
-                      (editor:with-point ((sub-pt pt))
-                        (loop repeat (count-lines-after sub-pt)
-                              do (editor::line-offset sub-pt 1)
-                                 (erase-line sub-pt))))
-                   (1 (erase-line-before pt)
-                      (editor:with-point ((sub-pt pt))
-                        (loop repeat (- height 1 (count-lines-after sub-pt))
-                              do (editor::line-offset sub-pt -1)
-                                 (erase-line sub-pt))))
-                   (t (let ((col (editor:point-position pt))
-                            (r (count-lines-after pt)))
-                        (editor:buffer-end pt)
-                        (loop repeat height
-                              do (erase-line pt)
-                                 (editor:line-offset pt -1 0))
-                        (when (= param1 3)
-                          (editor:delete-between-points (editor:buffers-start buffer) pt))
-                        (editor:buffer-end pt)
-                        (editor:line-offset pt (- r) col))))
-              (go finish)
-              el (case (or param1 0)
-                   (0 (erase-line-after pt))
-                   (1 (erase-line-before pt))
-                   (2 (erase-line pt)))
-              (go finish)
-              il
-              (editor::move-to-column pt 0)
-              (let* ((count (if (and param1 (plusp param1)) param1 1))
-                     (str (apply #'string-append
-                                 (loop repeat count
-                                       collect (make-string width :initial-element #\Space)
-                                       collect (string #\Newline)))))
-                (editor::insert-buffer-string
-                 pt
-                 (editor::make-buffer-string :%string str
+        (case (char pending-sequence (1- (length pending-sequence)))
+          (#\Null ;ICH
+           (editor::insert-spaces pt (if (and param1 (plusp param1)) param1 1)))
+          (#\A ;CUU
+           (let ((col (editor:point-column pt)))
+             (loop repeat (if (and param1 (plusp param1)) param1 1)
+                   until (or (>= (count-lines-after pt) height)
+                             (null (editor:line-offset pt -1))))
+             (ensure-move-to-column pt col)))
+          (#\B ;CUD
+           (let ((col (editor:point-column pt)))
+             (loop repeat (if (and param1 (plusp param1)) param1 1)
+                   while (editor:line-offset pt 1))
+             (ensure-move-to-column pt col)))
+          (#\C ;CUF
+           (loop repeat (if (and param1 (plusp param1)) param1 1)
+                 until (>= (editor:point-column pt) width)
+                 if (eql (editor:character-at pt 0) #\Newline)
+                   do (editor:insert-character pt #\Space)
+                 else do (editor::point-after pt)))
+          (#\D ;CUB
+           (loop repeat (if (and param1 (plusp param1)) param1 1)
+                 until (zerop (editor:point-column pt))
+                 do (editor::point-before pt)))
+          (#\E ;CNL
+           (loop repeat (if (and param1 (plusp param1)) param1 1)
+                 while (editor:line-offset pt 1))
+           (ensure-move-to-column pt 0))
+          (#\F ;CPL
+           (loop repeat (if (and param1 (plusp param1)) param1 1)
+                 until (>= (count-lines-after pt) (1- height))
+                 do (editor:line-offset pt -1))
+           (editor::move-to-column pt 0))
+          (#\G ;CHA
+           (ensure-move-to-column pt (if (and param1 (plusp param1)) param1 1)))
+          ((or #\H #\f) ;CUP
+           (let ((param2 (second params)))
+             (editor:buffer-end pt)
+             (unless (editor:line-offset pt (- (if (and param1 (plusp param1)) param1 1) height))
+               (editor:buffer-start pt)
+               (ensure-line-offset pt (1- height)))
+             (ensure-move-to-column pt (1- (if (and param2 (plusp param2)) param2 1)))))
+          (#\I ;CHT
+           (loop repeat (if (and param1 (plusp param1)) param1 1)
+                 do (escaped-stream-insert-char stream #\Tab)))
+          (#\J ;ED
+           (case (or param1 0)
+             (0 (erase-line-after pt)
+                (editor:with-point ((sub-pt pt))
+                  (loop repeat (count-lines-after sub-pt)
+                        do (editor::line-offset sub-pt 1)
+                           (erase-line sub-pt))))
+             (1 (erase-line-before pt)
+                (editor:with-point ((sub-pt pt))
+                  (loop repeat (- height 1 (count-lines-after sub-pt))
+                        do (editor::line-offset sub-pt -1)
+                           (erase-line sub-pt))))
+             (t (let ((col (editor:point-position pt))
+                      (r (count-lines-after pt)))
+                  (editor:buffer-end pt)
+                  (loop repeat height
+                        do (erase-line pt)
+                           (editor:line-offset pt -1 0))
+                  (when (= param1 3)
+                    (editor:delete-between-points (editor:buffers-start buffer) pt))
+                  (editor:buffer-end pt)
+                  (editor:line-offset pt (- r) col)))))
+          (#\K ;EL
+           (case (or param1 0)
+             (0 (erase-line-after pt))
+             (1 (erase-line-before pt))
+             (2 (erase-line pt))))
+          (#\L ;IL
+           (editor::move-to-column pt 0)
+           (let* ((count (if (and param1 (plusp param1)) param1 1))
+                  (str (apply #'string-append
+                              (loop repeat count
+                                    collect (make-string width :initial-element #\Space)
+                                    collect (string #\Newline)))))
+             (editor::insert-buffer-string
+              pt (editor::make-buffer-string :%string str
                                              :properties `((0 (length str) (editor:face ,face)))))
-                (editor:with-point ((end (editor:buffers-end buffer))
-                                    (start (editor:buffers-end buffer)))
-                  (editor:line-offset start (- count) 0)
-                  (editor:delete-between-points start end))) 
-              (go finish)
-              dl
-              (editor::move-to-column pt 0)
-              (let ((count (if (and param1 (plusp param1)) param1 1)))
-                (editor:with-point ((end pt))
-                  (editor:line-offset end count 0)
-                  (editor:delete-between-points pt end)
-                  (editor:buffer-end end)
-                  (editor:insert-string end (make-string count :initial-element #\Newline))))
-              (go finish)
-              vpa
-              (let ((col (editor:point-column pt)))
-                (editor:buffer-end pt)
-                (unless (editor:line-offset pt (- (if (and param1 (plusp param1)) param1 1) height))
-                  (editor:buffer-start pt)
-                  (ensure-line-offset pt (1- height)))
-                (ensure-move-to-column pt col))
-              sgr
-              (setq param1 (or (pop csi-params) 0))
-              (case param1
-                (0 (setf face (editor:make-face nil)))
-                (1 (setface :bold-p t))
-                (3 (setface :italic-p t))
-                (4 (setface :underline-p t))
-                (7 (setface :inverse-p t))
-                (27 (setface :inverse-p nil))
-                (22 (setface :bold-p nil))
-                (23 (setface :italic-p nil))
-                (24 (setface :underline-p nil))
-                
-                ((or 38 48) (case (pop csi-params)
-                              (5 (go 8-bit))
-                              (2 (go 24-bit))))
-                (39 (setface :foreground nil))
-                (49 (setface :background nil))
-                ;; 4-bit
-                (t (cond ((or (<= 30 param1 37) (<= 90 param1 97))
-                          (setface :foreground (aref *4-bit-colors* param1)))
-                         ((or (<= 40 param1 47) (<= 100 param1 107))
-                          (setface :background (aref *4-bit-colors* (- param1 10)))))))
-              (when csi-params (go sgr))
-              (go finish)
-              8-bit
-              (setface (if (= param1 38) :foreground :background)
-                       (aref *8-bit-colors* (pop csi-params)))
-              (when csi-params (go sgr))
-              24-bit
-              (setface (if (= param1 38) :foreground :background)
-                       (destructuring-bind (r g b) csi-params
-                         (color:make-rgb (/ r 255) (/ g 255) (/ b 255))))
-              (setq csi-params (cdddr csi-params))
-              (when csi-params (go sgr))
-              tilde
-              (case param1
-                ((or 1 7) (editor:buffer-start pt))
-                ((or 2 8) (editor:buffer-end pt))
-                (3 (unless (eql (editor:character-at pt 0) #\Newline)
-                     (editor::delete-characters pt 1))))
-              finish
-              (setf pending-sequence nil))))
-         (t (insert-char char))))
-      (when cursor-visible
-        (when-let (window (first (editor:buffer-windows buffer)))
-          (when (editor::window-alive-p window)
-            (editor:process-character
-             (lambda (p) (declare (ignore p))
-               (editor:move-point (editor:buffer-point buffer) pt))
-             window)))))))
+             (editor:with-point ((end (editor:buffers-end buffer))
+                                 (start (editor:buffers-end buffer)))
+               (editor:line-offset start (- count) 0)
+               (editor:delete-between-points start end))))
+          (#\M ;DL
+           (editor::move-to-column pt 0)
+           (let ((count (if (and param1 (plusp param1)) param1 1)))
+             (editor:with-point ((end pt))
+               (editor:line-offset end count 0)
+               (editor:delete-between-points pt end)
+               (editor:buffer-end end)
+               (editor:insert-string end (make-string count :initial-element #\Newline)))))
+          (#\d ;VPA
+           (let ((col (editor:point-column pt)))
+             (editor:buffer-end pt)
+             (unless (editor:line-offset pt (- (if (and param1 (plusp param1)) param1 1) height))
+               (editor:buffer-start pt)
+               (ensure-line-offset pt (1- height)))
+             (ensure-move-to-column pt col)))
+          (#\h ;DECSET
+           (if (eql param1 #\?)
+             (loop for param in (cdr params)
+                   do (case param
+                        (25 (setf cursor-visible t))))
+             ;; TODO
+             ))
+          (#\l ;DECRST
+           (if (eql param1 #\?)
+             (loop for param in (cdr params)
+                   do (case param
+                        (25 (setf cursor-visible nil))))
+             ;; TODO
+             ))
+          (#\m (escaped-stream-handle-sgr stream params))))
+      (setf pending-sequence nil)
+      (escaped-stream-set-cursor stream))))
+
+(defun escaped-stream-handle-other-codes (stream)
+  "Here we handle ESC escape, some C0 codes, and discard others we don't support..."
+  (with-slots (pending-sequence pt) stream
+    (cond ((equal pending-sequence "")
+           (escaped-stream-insert-char pending-sequence #\Escape)
+           (setf pending-sequence nil)
+           (escaped-stream-set-cursor stream))
+          ((equal pending-sequence "D") ;IND
+           (let ((col (editor:point-column pt)))
+             (editor:line-offset pt 1)
+             (ensure-move-to-column pt col)
+             (escaped-stream-set-cursor stream)))
+          ((equal pending-sequence "M") ;RI
+           (let ((col (editor:point-column pt)))
+             (editor:line-offset pt -1)
+             (ensure-move-to-column pt col)
+             (escaped-stream-set-cursor stream)))
+          ;; For #, % and space, their control sequences are length 3,
+          ;; so we need to read one more character
+          ((and (= (length pending-sequence) 2)
+                (member (char pending-sequence 1) '(#\# #\% #\Space)))
+           t)
+          (t (setf pending-sequence nil)))))
+
+(defmethod stream:stream-write-char ((stream escaped-editor-stream) char)
+  (with-slots (pending-sequence) stream
+    (if pending-sequence
+      (progn
+        (vector-push-extend char pending-sequence)
+        (case (char pending-sequence 1)
+          (#\[ (when (and (> (length pending-sequence) 2)
+                          (<= #x40 (char-code char) #x7E))
+                 (escaped-stream-handle-csi stream)))
+          (t (escaped-stream-handle-other-codes stream))))
+      (if (eql char #\Escape)
+        (setf pending-sequence (make-array 10 :element-type 'character :initial-element #\Escape :fill-pointer 1 :adjustable t))
+        (escaped-stream-insert-char stream char)))))
 
 ;; FLI C functions used in PTY-STREAM
 
@@ -558,8 +537,7 @@ corresponding location."
      (envp :ptr))
   :result-type :int)
 
-(defconstant +sigterm+ 15
-  "SIGTERM enum value")
+(defconstant +sigterm+ 15 "SIGTERM enum value")
 
 ;; PTY Stream
 
@@ -738,7 +716,7 @@ corresponding location."
                                                "Term Relay" ()
                                                (lambda ()
                                                  (loop for char = (read-char pty-stream nil)
-                                                       if char do (write-char char escaped-output-stream) (princ char)
+                                                       if char do (write-char char escaped-output-stream)
                                                        else do (return))))))))
    :destroy-callback (lambda (pane)
                        (with-slots (relay-process pty-stream escaped-output-stream) pane
