@@ -246,16 +246,20 @@ corresponding location."
          ((eql char #\Bell) (capi:beep-pane))
          ((eql char #\Backspace) (editor::point-before pt))
          ((eql char #\Tab)
-          (editor::insert-buffer-string
-           pt
-           (editor::make-buffer-string :%string "	" :properties `((0 1 (editor:face ,face)))))
-          (editor::point-after pt)
-          (editor:with-point ((end pt))
-            (editor:line-end end)
-            (editor::delete-characters
+          (let* ((col (editor:point-column pt))
+                 (tab-spaces (editor:variable-value 'editor:spaces-for-tab :global))
+                 (space-count (mod col tab-spaces)))
+            (when (zerop space-count)
+              (setq space-count tab-spaces))
+            (editor::insert-buffer-string
              pt
-             (min (editor:variable-value 'editor:spaces-for-tab :global)
-                  (- (editor:point-column end) (editor:point-column pt))))))
+             (editor::make-buffer-string :%string "	" :properties `((0 1 (editor:face ,face)))))
+            (editor::point-after pt)
+            (editor:with-point ((end pt))
+              (editor:line-end end)
+              (editor::delete-characters
+               pt
+               (min space-count (- (editor:point-column end) col))))))
          (pending-sequence
           (push-end char pending-sequence)
           (when (or (alpha-char-p char)
