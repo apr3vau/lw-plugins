@@ -2,7 +2,7 @@
 
 This plugin allows you to render SVG images with LispWorks using the Graphics Port utility.
 
-The library is purely written in Common Lisp with no foreign dependency. It's deeply optimized for fast parsing and rendering. 0BSD licensed.
+The library is purely written in Common Lisp with no foreign dependency. It's heavily optimized for fast parsing and rendering. 0BSD licensed.
 
 ![screenshot](screenshot.png)
 
@@ -12,8 +12,7 @@ The library is purely written in Common Lisp with no foreign dependency. It's de
 
 We provide 2 ASDF systems: `lw-svg` , and `lw-svg-test` for testing. They depend on:
 
-- alexandria 
-- anaphora
+- alexandria
 - cl-ppcre
 - plump
 - serapeum
@@ -23,7 +22,7 @@ We provide 2 ASDF systems: `lw-svg` , and `lw-svg-test` for testing. They depend
 
 ### Simple method: `draw-svg-from-string`:
 
-``` commonlisp
+``` common-lisp
 (defparameter *test-svg-string*
   "<svg xmlns='http://www.w3.org/2000/svg'
         height='24px' viewBox='0 -960 960 960' width='24px' fill='#888888'>
@@ -109,7 +108,7 @@ There's two part in `lw-svg-test`, one is using `parachute`, and is mainly used 
 
 Thanks to the LispWorks Ltd. to provide us the exellent product.
 
-Thanks my headmate, May, who helps and supports me.
+Thanks my sister Simone, and my headmate May, who help and support me.
 
 Supporting Neurodiversity & Transgender & Plurality!
 

@@ -152,7 +152,7 @@
   (lambda (port x y w h)
     (loop for i from 0
           for svg in (serapeum:repeat-sequence (directory "~/svg-test/*.svg") 4)
-          do (multiple-value-bind (y x) (floor i 12)
+          do (multiple-value-bind (y x) (floor i 24)
                (draw-svg-from-string port svg (* x 32) (* y 32)))))))
 
 (setq test (capi:prompt-for-string ""))

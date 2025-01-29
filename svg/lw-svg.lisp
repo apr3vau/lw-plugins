@@ -3,12 +3,21 @@
 
 ;; Pure-Lisp SVG renderer for LispWorks
 
+;; The source code can be separated to - major parts, splitted with #\Page
+;; 1. CSS parser
+;; 2. SVG `path` data parser
+;; 3. Gradient painting server implementation
+;; 4. Main SVG parser & renderer
+
+;; Check README.md for usage and details.
+
 (defpackage lw-svg
-  (:use #:string-case #:anaphora)
+  (:use #:string-case)
   (:import-from #:alexandria #:clamp #:copy-hash-table #:lerp)
   (:import-from #:uiop #:string-prefix-p)
   (:import-from #:serapeum #:merge-tables)
   (:export
+   rad-to-deg deg-to-rad hex-to-spec
    css-parse-url css-parse-angel css-parse-color css-parse-length
    css-parse-a-number css-parse-transforms css-parse-numeric-color css-parse-all-angels-from-string
    css-parse-all-length-from-string css-parse-all-numbers-from-string
@@ -40,6 +49,7 @@
              (mapcar (lambda (str) (/ (parse-integer str :radix 16) deno))
                      hex-list)))))
 
+
 ;; (Partial) CSS parser
 
 (defun css-parse-a-number (str &optional (start 0))
@@ -241,16 +251,15 @@ https://www.w3.org/TR/css3-values/#angles"
   (let ((len (length str)))
     (multiple-value-bind (num end-pos) (css-parse-a-number str start)
       (unless (null num)
-        (acond
-          ((search "grad" str :start2 end-pos :end2 (min len (+ end-pos 4)))
-           (values (deg-to-rad (* num 0.9d0)) (+ end-pos 4)))
-          ((search "rad" str :start2 end-pos :end2 (min len (+ end-pos 3)))
-           (values num (+ end-pos 3)))
-          ((search "turn" str :start2 end-pos :end2 (min len (+ end-pos 4)))
-           (values (* num gp:2pi) (+ end-pos 4)))
-          ((search "deg" str :start2 end-pos :end2 (min len (+ end-pos 3)))
-           (values (deg-to-rad num) (+ end-pos 3)))
-          (t (values (deg-to-rad num) end-pos)))))))
+        (cond ((search "grad" str :start2 end-pos :end2 (min len (+ end-pos 4)))
+               (values (deg-to-rad (* num 0.9d0)) (+ end-pos 4)))
+              ((search "rad" str :start2 end-pos :end2 (min len (+ end-pos 3)))
+               (values num (+ end-pos 3)))
+              ((search "turn" str :start2 end-pos :end2 (min len (+ end-pos 4)))
+               (values (* num gp:2pi) (+ end-pos 4)))
+              ((search "deg" str :start2 end-pos :end2 (min len (+ end-pos 3)))
+               (values (deg-to-rad num) (+ end-pos 3)))
+              (t (values (deg-to-rad num) end-pos)))))))
 
 (defun css-parse-all-angels-from-string (str)
   "Parse a CSS <angel> to radians in STR, return as a vector"
@@ -340,6 +349,7 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
         (error "LW-SVG only support ID url selector.")
         (plump-dom:get-element-by-id root-node (subseq url 1))))))
 
+
 ;; Deal with SVG path data
 
 ;; TODO: https://svgwg.org/svg2-draft/implnote.html#ArcCorrectionOutOfRangeRadii
@@ -633,6 +643,7 @@ GP:DRAW-PATH."
       (start-new-command #\Null)
       commands)))
 
+
 ;; Gradient
 
 (defclass svg-gradient ()
@@ -666,6 +677,7 @@ GP:DRAW-PATH."
     ("radialGradient" (svg-parse-radial-gradient node left top right bottom))))
 
 (defun svg-parse-linear-gradient (node left top right bottom)
+  (declare (optimize (safety 0) (fixnum-safety 0)))
   (flet ((parse-vector-value (node key start end)
            (when-let (str (gethash key (plump:attributes node)))
              (let ((len (length str)))
@@ -709,6 +721,7 @@ GP:DRAW-PATH."
       grad)))
 
 (defun svg-parse-radial-gradient (node left top right bottom)
+  (declare (optimize (safety 0) (fixnum-safety 0)))
   (flet ((parse-vector-value (node key start end)
            (when-let (str (gethash key (plump:attributes node)))
              (let ((len (length str)))
@@ -747,11 +760,12 @@ GP:DRAW-PATH."
            (b2 (- x3 x4))
            (c2 (- (* x4 y3) (* y4 x3)))
            (d (- (* a1 b2) (* a2 b1)))
-           (mx (if (zerop d) cx (/ (- (* b1 c2) (* b2 c1)) d)))
-           (my (if (zerop d) cy (/ (- (* c1 a2) (* c2 a1)) d)))
+           (mx (if (zerop d) cx (round (/ (- (* b1 c2) (* b2 c1)) d))))
+           (my (if (zerop d) cy (round (/ (- (* c1 a2) (* c2 a1)) d))))
            (grad (make-instance 'svg-radial-gradient
                                 :cx cx :cy cy :r r :fx fx :fy fy :fr fr :mx mx :my my))
            (stops (plump-dom:get-elements-by-tag-name node "stop")))
+      (declare (type fixnum cx cy r fx fy fr))
       (dolist (stop stops)
         (push (make-svg-gradient-stop
                :offset (or (parse-stop-value stop "offset") 0d0)
@@ -776,7 +790,8 @@ GP:DRAW-PATH."
 
 (defgeneric svg-gradient-color (x y grad)
   (:method (x y (grad svg-linear-gradient))
-   (declare (type fixnum x y))
+   (declare (optimize (safety 0) (float 0) (fixnum-safety 0))
+            (type fixnum x y))
    (let* ((x1 (slot-value grad 'x1))
           (y1 (slot-value grad 'y1))
           (x2 (slot-value grad 'x2))
@@ -785,7 +800,7 @@ GP:DRAW-PATH."
           (v1y (- y1 y))
           (v2x (- x1 x2))
           (v2y (- y1 y2))
-          (v2len (sqrt (+ (* v2x v2x) (* v2y v2y))))
+          (v2len (sys::sqrt$pos (+ (* v2x v2x) (* v2y v2y))))
           (percentage (/ (+ (* v1x v2x) (* v1y v2y)) v2len v2len))
           (stops (svg-gradient-stops grad))
           before after)
@@ -808,7 +823,7 @@ GP:DRAW-PATH."
           (lerp ratio (svg-gradient-stop-opacity before) (svg-gradient-stop-opacity after)))))))
   
   (:method (x y (grad svg-radial-gradient))
-   (declare (optimize (float 0) (safety 0))
+   (declare (optimize (safety 0) (float 0) (fixnum-safety 0))
             (type fixnum x y))
    (let* ((cx (slot-value grad 'cx))
           (cy (slot-value grad 'cy))
@@ -866,6 +881,7 @@ GP:DRAW-PATH."
                    (lerp-color #'color:color-red) (lerp-color #'color:color-green) (lerp-color #'color:color-blue)
                    (lerp ratio (svg-gradient-stop-opacity before) (svg-gradient-stop-opacity after)))))))))))
 
+
 ;; SVG render
 
 (defun svg-parse-attribute-by-name (key val port container-attributes root-node)
@@ -1008,18 +1024,18 @@ element."
                                             (color:color-green color)
                                             (color:color-blue color)
                                             (* (color:color-alpha color) alpha)))))
-                   (awhen (or (parse-opacity (gethash "fill-opacity" container-attributes))
-                              (parse-opacity (gethash "opacity" container-attributes)))
-                     (setq fill (with-alpha fill it)))
-                   (awhen (or (parse-opacity (gethash "fill-opacity" new-attrs))
-                              (parse-opacity (gethash "opacity" new-attrs)))
-                     (setq fill (with-alpha fill it)))
-                   (awhen (or (parse-opacity (gethash "stroke-opacity" container-attributes))
-                              (parse-opacity (gethash "opacity" container-attributes)))
-                     (setq stroke (with-alpha stroke it)))
-                   (awhen (or (parse-opacity (gethash "stroke-opacity" new-attrs))
-                              (parse-opacity (gethash "opacity" new-attrs)))
-                     (setq stroke (with-alpha stroke it))))
+                   (when-let (op (or (parse-opacity (gethash "fill-opacity" container-attributes))
+                                     (parse-opacity (gethash "opacity" container-attributes))))
+                     (setq fill (with-alpha fill op)))
+                   (when-let (op (or (parse-opacity (gethash "fill-opacity" new-attrs))
+                                     (parse-opacity (gethash "opacity" new-attrs))))
+                     (setq fill (with-alpha fill op)))
+                   (when-let (op (or (parse-opacity (gethash "stroke-opacity" container-attributes))
+                                     (parse-opacity (gethash "opacity" container-attributes))))
+                     (setq stroke (with-alpha stroke op)))
+                   (when-let (op (or (parse-opacity (gethash "stroke-opacity" new-attrs))
+                                     (parse-opacity (gethash "opacity" new-attrs))))
+                     (setq stroke (with-alpha stroke op))))
                  ;; Deal with gradients
                  (if (plump-dom:node-p fill)
                    (let ((grad-trans (gethash "gradientTransform" (plump-dom:attributes fill)))
@@ -1153,15 +1169,15 @@ element."
                ;; we need to store it for later parse & apply. It should be a STRING.
                (when-let (new-transform (gethash "transform" new-attrs))
                  ;; When transformed containers nested, append them after new transforms.
-                 (awhen (gethash "container-transforms" new-table)
-                   (setq new-transform (string-append new-transform " " it)))
+                 (when-let (trans (gethash "container-transforms" new-table))
+                   (setq new-transform (string-append new-transform " " trans)))
                  (setf (gethash "container-transforms" new-table) new-transform))
                (string-case (tag)
                  ("svg"
                   (capi:with-geometry port
-                    (let ((viewbox (aif (gethash "viewBox" new-attrs)
-                                            (coerce (css-parse-all-numbers-from-string it) 'list)
-                                            nil)))
+                    (let ((viewbox (if-let (val (gethash "viewBox" new-attrs))
+                                       (coerce (css-parse-all-numbers-from-string val) 'list)
+                                     nil)))
                       (gp:rectangle-bind (viewbox-l viewbox-t viewbox-w viewbox-h)
                           viewbox
                         (declare (type double-float viewbox-l viewbox-t viewbox-w viewbox-h))
@@ -1174,9 +1190,9 @@ element."
                                (new-w (svg-parse-attribute-by-name "width" (gethash "width" new-attrs) port container-attributes root-node))
                                (new-h (svg-parse-attribute-by-name "height" (gethash "height" new-attrs) port container-attributes root-node))
                                (transform (gp:make-transform))
-                               (preserve-aspect (aif (gethash "preserveAspectRatio" new-attrs)
-                                                     (split-sequence '(#\Space) it)
-                                                     '("xMidYMid" "meet")))
+                               (preserve-aspect (if-let (val (gethash "preserveAspectRatio" new-attrs))
+                                                    (split-sequence '(#\Space) val)
+                                                  '("xMidYMid" "meet")))
                                (align (first preserve-aspect))
                                (scale (or (second preserve-aspect) "meet")))
                           (declare (type double-float new-x new-y)
@@ -1254,8 +1270,9 @@ element."
                         (new-y (if-let (val (gethash "y" new-attrs))
                                    (svg-parse-attribute-by-name "y" val port container-attributes root-node)
                                  0d0))
-                        (transform (aif (gethash "svg-transform" container-attributes) (gp:copy-transform it)
-                                        (gp:make-transform))))
+                        (transform (if-let (val (gethash "svg-transform" container-attributes))
+                                       (gp:copy-transform val)
+                                     (gp:make-transform))))
                     (declare (type double-float new-x new-y))
                     ;; Move the left-top of the sub-graph to (x, y)
                     (gp:apply-translation transform new-x new-y)

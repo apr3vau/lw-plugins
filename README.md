@@ -1,15 +1,10 @@
 # LispWorks Plugins by April & May
 
-Here's the LispWorks Plugins created by April & May. All plugins are
-zero-dependency, tested under the LispWorks 8.0.1 Windows & Macintosh,
-safe for delivery, and have been used for a long time in my own. All
-the codes are licensed under
-[0BSD](https://spdx.org/licenses/0BSD.html)), allowing any kind of
-usage without any limitation. Feel free to include any part of them in
-your own product.
+Here's the LispWorks Plugins created by April & May. All plugins are zero-dependency (except sub-projects), tested under the LispWorks 8.0.1 Windows & Macintosh, safe for delivery, and have been used for a long time in my own. All the codes are licensed under [0BSD](https://spdx.org/licenses/0BSD.html)), allowing any kind of usage without any limitation. Feel free to include any part of them in your own product.
 
 Here we provide:
 
+- [NEW] Pure-Lisp SVG rendering with LispWorks Graphics Port ([lw-svg](./svg/))
 - [NEW] Terminal Utilities for LispWorks, includes a functional Unix PTY running with the Editor, and a stream that can cope with ANSI escape sequences ([term.lisp](./term.lisp))
 - [NEW] A docstring folding facility, similar with definition folding([docstring-folding.lisp](./docstring-folding.lisp))
 - [NEW] Side Tree, a project explorer alternative to [Treemacs](https://github.com/Alexander-Miller/treemacs) ([side-tree.lisp](./side-tree.lisp))
@@ -24,39 +19,29 @@ Here we provide:
 
 ## Usage
 
-Basically, just simply load any file you want to include. Some plugins
-has specific requirement for delivery (like
-[editor-markdown](editor-markdown.lisp)). For details, please visit
-each source file and read the top comment lines of them.
+Basically, just simply load any file you want to include. Some plugins has specific requirement for delivery (like [editor-markdown](editor-markdown.lisp)). For details, please visit each source file and read the top comment lines of them.
 
-Here's a sample code to load all of them into your LispWorks IDE. We
-assume that you clone this repo into `~/common-lisp/lw-plugins`:
+Here's a sample code to load all of them into your LispWorks IDE. We assume that you clone this repo into `~/common-lisp/lw-plugins`:
 
-	(dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
-	  (compile-file file :load t))
+```common-lisp
+(dolist (file (directory #P"~/common-lisp/lw-plugins/*.lisp"))
+  (compile-file file :load t))
+```
 
 There's also an ASDF system file. You can load it using ASDF:
 
-	(require "asdf")
-	(asdf:load-system :lw-plugins)
+```common-lisp
+(require "asdf")
+(asdf:load-system :lw-plugins)
+```
 
 ### Nerd Icons
 
-To use Nerd Icons, you should install
-[NerdFonts]("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/NerdFontsSymbolsOnly.zip")
- first. You can do that by involking `Nerd Icons Install Font` if you
-have load [nerd-icons.lisp](./nerd-icons/nerd-icons.lisp).
+To use Nerd Icons, you should install [NerdFonts]("https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/NerdFontsSymbolsOnly.zip") first. You can do that by involking `Nerd Icons Install Font` if you have load [nerd-icons.lisp](./nerd-icons/nerd-icons.lisp).
 
 > Note: If you choose to install other Nerd Fonts variant (not the Symbols Nerd Font), you should customize the `*nerd-font-family*` variable.
 
-The Directory Mode integration is at
-[nerd-icons-directory.lisp](./nerd-icons/nerd-icons-directory.lisp),
- and the Side Tree integration is at
-[nerd-icons-side-tree.lisp](./nerd-icons/nerd-icons-side-tree.lisp).
-They're all relying to
-[nerd-icons.lisp](./nerd-icons/nerd-icons.lisp). You can use the ASDF
-systems `lw-plugins/nerd-icons-directory` and
-`lw-plugins/nerd-icons-side-tree` to load them selectively.
+The Directory Mode integration is at [nerd-icons-directory.lisp](./nerd-icons/nerd-icons-directory.lisp), and the Side Tree integration is at [nerd-icons-side-tree.lisp](./nerd-icons/nerd-icons-side-tree.lisp).  They're all relying to [nerd-icons.lisp](./nerd-icons/nerd-icons.lisp). You can use the ASDF systems `lw-plugins/nerd-icons-directory` and `lw-plugins/nerd-icons-side-tree` to load them selectively.
 
 For example, to load all features:
 
@@ -73,7 +58,7 @@ For example, to load all features:
 
 Thanks to the LispWorks Ltd. to provide us the exellent product.
 
-Thanks my headmate, May, who helps and supports me.
+Thanks sister Simone, and my headmate May, who help and support me.
 
 Supporting Neurodiversity & Transgender & Plurality!
 
