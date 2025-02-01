@@ -138,6 +138,8 @@ Return NIL if there isn't a number at START."
      end)
     numbers))
 
+;; CSS length-percentage
+
 (defun css-parse-length (port str &optional (width-or-height :width) viewport-w viewport-h parent-w parent-h)
   "Parse a CSS format <length-percentage> to corresponding pixels,
 based on current graphics port, CSS viewport and element's parent."
@@ -198,6 +200,8 @@ based on current graphics port, CSS viewport and element's parent."
             (css-parse-length port sub width-or-height viewport-w viewport-h parent-w parent-h))
           (ppcre:all-matches-as-strings *css-length-percentage-scanner* str)))
 
+;; CSS color
+
 (defvar *css-color-keywords* (make-hash-table :test #'equalp :size 17)
   "A map of CSS basic color keywords, from name to LW color spec.
 
@@ -257,6 +261,8 @@ https://www.w3.org/TR/css-color-3/#numerical"
             ;; EASY hack for https://www.w3.org/TR/css-color-3/#svg-color
             (color:get-color-translation (intern (string-upcase str) "KEYWORD")))))))
 
+;; CSS angle
+
 (defun css-parse-angel (str &optional (start 0))
   "Parse a CSS <angel> to radians from START of the STR.
 
@@ -300,6 +306,8 @@ https://www.w3.org/TR/css3-values/#angles"
            (go start))))
      end)
     numbers))
+
+;; CSS transform
 
 (defparameter *transform-scanner*
   (ppcre:create-scanner "(matrix|scale(?:X|Y)?|translate(?:X|Y)?|rotate|skew(?:X|Y)?)\\((?:.|\\s)+?\\)")
@@ -351,6 +359,8 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
             (push-end trans transforms)))))
     transforms))
 
+;; CSS url
+
 (defparameter *css-url-scanner*
   (ppcre:create-scanner "(?:url\\(\"(.+)\"\\))|(?:url\\('(.+)'\\))|(?:url\\((.+)\\))"))
 
@@ -364,7 +374,10 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
         (error "LW-SVG only support ID url selector.")
         (plump-dom:get-element-by-id root-node (subseq url 1))))))
 
+;; CSS `style` parser
+
 (defun css-parse-style-properties (str)
+  "Parse CSS style content STR to a hash-table"
   (setq str (string-trim-whitespace str))
   (let ((table (make-hash-table :test #'equalp)))
     (mapcar (lambda (str)
@@ -387,6 +400,10 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
   (ppcre:create-scanner "\\[([A-Za-z]+)((?:~|\\|)?=)?([A-Za-z]+)?\\]"))
 
 (defun css-parse-a-selector (str)
+  "Parse one CSS selector from a CSS selector list (separated by #\,)
+
+Return a function that accept one argument PLUMP:NODE, which will
+return a non-nil value if the node conforms the selector."
   (let ((index 0)
         (len (length str))
         funcs)
@@ -414,16 +431,16 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
                              (string-trim '(#\") (subseq str (aref rs 2) (aref re 2))))))
                   (push
                    (if op
-                     (string-case:string-case (op)
-                       ("=" (lambda (node) (equal (plump:attribute node attr) val)))
-                       ("~=" (lambda (node)
-                               (member val (split-sequence '(#\Space) (plump:attribute node attr))
-                                       :test #'equal)))
-                       ("|=" (lambda (node)
-                               (let ((x (plump:attribute node attr)))
-                                 (or (equal x val)
-                                     (and (stringp x)
-                                          (serapeum:string-prefix-p (string-append x "-") val)))))))
+                     (case (char op 0)
+                       (#\= (lambda (node) (equal (plump:attribute node attr) val)))
+                       (#\~ (lambda (node)
+                              (member val (split-sequence '(#\Space) (plump:attribute node attr))
+                                      :test #'equal)))
+                       (#\| (lambda (node)
+                              (let ((x (plump:attribute node attr)))
+                                (or (equal x val)
+                                    (and (stringp x)
+                                         (string-prefix-p (string-append x "-") val)))))))
                      (lambda (node) (plump:attribute node attr)))
                    funcs))
                 (setq index end)))
@@ -449,6 +466,10 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
       (every (lambda (func) (funcall func node)) funcs))))
 
 (defun css-parse-selectors (str)
+  "Parse a CSS selector list.
+
+Return a function that accept one argument PLUMP:NODE, which will
+return a non-nil value if the node conforms the selector."
   (let ((selectors (mapcar #'css-parse-a-selector
                            (mapcar #'string-trim-whitespace
                                    (split-sequence '(#\,) str :coalesce-separators t)))))
@@ -459,6 +480,9 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
   (ppcre:create-scanner "([^\\{\\}]+?)\\{([^\\{\\}]+?)\\}"))
 
 (defun css-parse-style-element (node)
+  "Giving a `<style>` element, return an alist which has the function
+of the CSS selector as CAR, and a hash-table of corresponding
+properties as CDR."
   (let ((str (string-trim-whitespace (plump:text node)))
         result)
     (ppcre:do-scans (ms me rs re *css-style-block-scanner* str)
