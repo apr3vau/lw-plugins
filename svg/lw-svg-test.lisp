@@ -68,7 +68,8 @@
 ;; Interactive test
 
 (defparameter *interactive-tests*
-  '(("Path quadratic bezier" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/quad01.svg")
+  '(("Use element and CSS style" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/struct/Use-changed-styles.svg")
+    ("Path quadratic bezier" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/quad01.svg")
     ("Path arc" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/arcs01.svg")
     ("Retangle and transform" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/rect02.svg")
     ("Ellipse and transform" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/ellipse01.svg")
@@ -142,7 +143,7 @@
   (:default-initargs
    :title (format nil "1/~A ~A" (1+ (length *interactive-tests*)) (first (first *interactive-tests*)))))
 
-(capi:display (make-instance 'interactive-test-interface))
+;(capi:display (make-instance 'interactive-test-interface))
 
 #|
 (capi:contain

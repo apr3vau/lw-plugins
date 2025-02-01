@@ -13,9 +13,8 @@
 
 (defpackage lw-svg
   (:use #:string-case)
-  (:import-from #:alexandria #:clamp #:copy-hash-table #:lerp)
+  (:import-from #:alexandria #:clamp #:copy-hash-table #:lerp #:ensure-gethash)
   (:import-from #:uiop #:string-prefix-p)
-  (:import-from #:serapeum #:merge-tables)
   (:export
    rad-to-deg deg-to-rad hex-to-spec
    css-parse-url css-parse-angel css-parse-color css-parse-length
@@ -48,6 +47,20 @@
       (apply #'color:make-rgb
              (mapcar (lambda (str) (/ (parse-integer str :radix 16) deno))
                      hex-list)))))
+
+;; Why I'm prefer using CL's convention `NFOO` but not Scheme's `FOO!` XD...
+(defun nmerge-tables (table &rest tables)
+  "Merge values of hash-tables in TABLES into TABLE. TABLE will be modified.
+
+From serapeum's `merge-tables!`"
+  (declare (optimize (speed 3)))
+  (reduce (lambda (ht1 ht2)
+            (maphash (lambda (k v)
+                       (setf (gethash k ht1) v))
+                     ht2)
+            ht1)
+          tables
+          :initial-value table))
 
 
 ;; (Partial) CSS parser
@@ -240,7 +253,9 @@ https://www.w3.org/TR/css-color-3/#numerical"
       (hex-to-spec str)
       (if (or (string-prefix-p "rgb" str) (string-prefix-p "hsl" str))
         (css-parse-numeric-color str)
-        (gethash str *css-color-keywords*)))))
+        (or (gethash str *css-color-keywords*)
+            ;; EASY hack for https://www.w3.org/TR/css-color-3/#svg-color
+            (color:get-color-translation (intern (string-upcase str) "KEYWORD")))))))
 
 (defun css-parse-angel (str &optional (start 0))
   "Parse a CSS <angel> to radians from START of the STR.
@@ -348,6 +363,110 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
       (if (or (null url) (not (eql (char url 0) #\#)))
         (error "LW-SVG only support ID url selector.")
         (plump-dom:get-element-by-id root-node (subseq url 1))))))
+
+(defun css-parse-style-properties (str)
+  (setq str (string-trim-whitespace str))
+  (let ((table (make-hash-table :test #'equalp)))
+    (mapcar (lambda (str)
+              (destructuring-bind (name val)
+                  (mapcar #'string-trim-whitespace (split-sequence '(#\:) str :coalesce-separators t))
+                (setf (gethash name table) val)))
+            (mapcar #'string-trim-whitespace (split-sequence '(#\;) str :coalesce-separators t)))
+    table))
+
+(defmacro css-parse-class (node)
+  `(split-sequence '(#\Space) (plump:attribute ,node "class") :coalesce-separators t))
+
+(defparameter *css-class-name-scanner*
+  (ppcre:create-scanner "[A-Za-z][A-Za-z0-9\\-_]*"))
+
+(defparameter *css-id-scanner*
+  (ppcre:create-scanner "[A-Za-z][A-Za-z0-9\\-_:\\.]*"))
+
+(defparameter *css-attribute-selector-scanner*
+  (ppcre:create-scanner "\\[([A-Za-z]+)((?:~|\\|)?=)?([A-Za-z]+)?\\]"))
+
+(defun css-parse-a-selector (str)
+  (let ((index 0)
+        (len (length str))
+        funcs)
+    (tagbody
+     start
+     (let ((first-char (char str index)))
+       (case first-char
+         (#\. (multiple-value-bind (start end)
+                  (ppcre:scan *css-class-name-scanner* str :start index)
+                (let ((cla (subseq str start end)))
+                  (push (lambda (node) (member cla (css-parse-class node) :test #'string=)) funcs))
+                (setq index end)))
+         (#\# (multiple-value-bind (start end)
+                  (ppcre:scan *css-id-scanner* str :start index)
+                (let ((id (subseq str start end)))
+                  (push (lambda (node) (equal id (plump:attribute node "id"))) funcs))
+                (setq index end)))
+         (#\[ (multiple-value-bind (start end rs re)
+                  (ppcre:scan *css-attribute-selector-scanner* str :start index)
+                (declare (ignore start))
+                (let ((attr (subseq str (aref rs 0) (aref re 0)))
+                      (op (when (aref rs 1)
+                            (subseq str (aref rs 1) (aref re 1))))
+                      (val (when (aref rs 2)
+                             (string-trim '(#\") (subseq str (aref rs 2) (aref re 2))))))
+                  (push
+                   (if op
+                     (string-case:string-case (op)
+                       ("=" (lambda (node) (equal (plump:attribute node attr) val)))
+                       ("~=" (lambda (node)
+                               (member val (split-sequence '(#\Space) (plump:attribute node attr))
+                                       :test #'equal)))
+                       ("|=" (lambda (node)
+                               (let ((x (plump:attribute node attr)))
+                                 (or (equal x val)
+                                     (and (stringp x)
+                                          (serapeum:string-prefix-p (string-append x "-") val)))))))
+                     (lambda (node) (plump:attribute node attr)))
+                   funcs))
+                (setq index end)))
+         (#\Space (let ((prev-func (pop funcs))
+                        (sub-func (css-parse-a-selector (subseq str (1+ index)))))
+                    (push
+                     (lambda (node)
+                       (and (loop for parent = (plump:parent node) then (plump:parent parent)
+                                  until (or (plump:root-p parent) (null parent))
+                                  thereis (funcall prev-func parent))
+                            (funcall sub-func node)))
+                     funcs)
+                    (setq index len)))
+         (t (if (alpha-char-p first-char)
+              (let* ((end (or (position-if-not #'alpha-char-p str :start index) len))
+                     (name (subseq str index end)))
+                (push (lambda (node) (equal name (plump:tag-name node))) funcs)
+                (setq index end))
+              (setq index len)))))
+     (if (< index len)
+       (go start)))
+    (lambda (node)
+      (every (lambda (func) (funcall func node)) funcs))))
+
+(defun css-parse-selectors (str)
+  (let ((selectors (mapcar #'css-parse-a-selector
+                           (mapcar #'string-trim-whitespace
+                                   (split-sequence '(#\,) str :coalesce-separators t)))))
+    (lambda (node)
+      (some (lambda (func) (funcall func node)) selectors))))
+
+(defparameter *css-style-block-scanner*
+  (ppcre:create-scanner "([^\\{\\}]+?)\\{([^\\{\\}]+?)\\}"))
+
+(defun css-parse-style-element (node)
+  (let ((str (string-trim-whitespace (plump:text node)))
+        result)
+    (ppcre:do-scans (ms me rs re *css-style-block-scanner* str)
+      (when (every #'identity rs)
+        (let ((selector (css-parse-selectors (subseq str (aref rs 0) (aref re 0))))
+              (props (css-parse-style-properties (subseq str (aref rs 1) (aref re 1)))))
+          (push (cons selector props) result))))
+    result))
 
 
 ;; Deal with SVG path data
@@ -884,6 +1003,26 @@ GP:DRAW-PATH."
 
 ;; SVG render
 
+(defvar *svg-presentation-attributes*
+  '("x"                            "y"                          "cx"                          "cy"
+    "r"                            "rx"                         "ry"                          "width"
+    "height"                       "d"                          "fill"                        "transform"
+    "alignment-baseline"           "baseline-shift"             "clip-path"                   "clip-rule"
+    "color"                        "color-interpolation"        "color-interpolation-filters" "color-rendering"
+    "cursor"                       "direction"                  "display"                     "dominant-baseline"
+    "fill-opacity"                 "fill-rule"                  "filter"                      "flood-color"
+    "flood-opacity"                "font-family"                "font-size"                   "font-size-adjust"
+    "font-stretch"                 "font-style"                 "font-variant"                "font-weight"
+    "glyph-orientation-horizontal" "glyph-orientation-vertical" "image-rendering"             "letter-spacing"
+    "lighting-color"               "marker-end"                 "marker-mid"                  "marker-start"
+    "mask"                         "opacity"                    "overflow"                    "paint-order"
+    "pointer-events"               "shape-rendering"            "stop-color"                  "stop-opacity"
+    "stroke"                       "stroke-dasharray"           "stroke-dashoffset"           "stroke-linecap"
+    "stroke-linejoin"              "stroke-miterlimit"          "stroke-opacity"              "stroke-width"
+    "text-anchor"                  "text-decoration"            "text-overflow"               "text-rendering"
+    "unicode-bidi"                 "vector-effect"              "visibility"                  "white-space"
+    "word-spacing"                 "writing-mode"               ))
+
 (defun svg-parse-attribute-by-name (key val port container-attributes root-node)
   "A helper function for parsing the value of a field to corresponding data type."
   (string-case (key)
@@ -962,6 +1101,17 @@ element."
   (let ((tag (plump-dom:tag-name node))
         (new-attrs (plump-dom:attributes node)))
     (declare (type string tag))
+    ;; Processing CSS style properties and merge them into NEW-ATTRS
+    (let ((styles (ensure-gethash
+                   "css-styles" container-attributes
+                   (mapcan #'css-parse-style-element
+                           (plump-dom:get-elements-by-tag-name root-node "style")))))
+      ;; There're some problems here, so it only conforms SVG 1.1 but not 2
+      (loop for (pred . attrs) in styles
+            when (funcall pred node)
+              do (nmerge-tables new-attrs attrs))
+      (when-let (inline-style (plump-dom:attribute node "style"))
+        (nmerge-tables new-attrs (css-parse-style-properties inline-style))))
     (labels ((get-attr (key)
                (svg-parse-attribute-by-name
                 key (or (gethash key new-attrs)
@@ -1106,7 +1256,7 @@ element."
                         (cy (get-attr "cy"))
                         (r (get-attr "r")))
                     (declare (type double-float cx cy r))
-                    (run-draw-path cx cy (list (list :arc (- cx r) (- cy r) (* r 2d0) (* r 2d0) 0d0 gp:f2pi)))))
+                    (run-draw-path cx cy (list (list :arc (- cx r) (- cy r) (* r 2d0) (* r 2d0) 0d0 gp:f2pi t)))))
         ("ellipse" (let ((cx (get-attr "cx")) (cy (get-attr "cy"))
                          (rx (get-attr "rx")) (ry (get-attr "ry")))
                      (declare (type double-float cx cy rx ry))
@@ -1157,12 +1307,11 @@ element."
                                          mid-x (/ (the double-float (+ min-x max-x)) 2d0)
                                          mid-y (/ (the double-float (+ min-y max-y)) 2d0)))
                      (vector-push (list :close) path)
-                     (print path)
                      (run-draw-path mid-x mid-y path)))
         (t (when (member tag '("a" "clipPath" "defs" "g" "marker" "mask" "pattern" "svg" "switch" "symbol" "unknown" "use")
                          :test #'string=)
              (let ((new-table (copy-hash-table container-attributes)))
-               (maphash (lambda (key val) (setf (gethash key new-table) val))
+               (maphash (lambda (k v) (setf (gethash k new-table) v))
                         new-attrs)
                ;; If a transform is specified for a container,
                ;; since we know nether the transform-origin, nor the parent's size it relative with,
@@ -1262,25 +1411,37 @@ element."
                               (dolist (func funcs)
                                 (funcall func port)))))))))
                  ("use"
-                  (let ((id (string-left-trim '(#\#) (or (gethash "href" new-attrs)
-                                                         (gethash "xlink:href" new-attrs))))
-                        (new-x (if-let (val (gethash "x" new-attrs))
-                                   (svg-parse-attribute-by-name "x" val port container-attributes root-node)
-                                 0d0))
-                        (new-y (if-let (val (gethash "y" new-attrs))
-                                   (svg-parse-attribute-by-name "y" val port container-attributes root-node)
-                                 0d0))
-                        (transform (if-let (val (gethash "svg-transform" container-attributes))
-                                       (gp:copy-transform val)
-                                     (gp:make-transform))))
+                  (let* ((id (string-left-trim '(#\#) (or (gethash "href" new-attrs)
+                                                          (gethash "xlink:href" new-attrs))))
+                         (new-x (if-let (val (gethash "x" new-attrs))
+                                    (svg-parse-attribute-by-name "x" val port container-attributes root-node)
+                                  0d0))
+                         (new-y (if-let (val (gethash "y" new-attrs))
+                                    (svg-parse-attribute-by-name "y" val port container-attributes root-node)
+                                  0d0))
+                         (transform (if-let (val (gethash "svg-transform" container-attributes))
+                                        (gp:copy-transform val)
+                                      (gp:make-transform)))
+                         (child (plump-dom:get-element-by-id root-node id))
+                         ; Make a shadow tree
+                         (shadow-child (make-instance 'plump:element
+                                                      :parent node
+                                                      :tag-name (plump:tag-name child)
+                                                      :children (plump:make-child-array)
+                                                      :attributes (plump:attributes node))))
                     (declare (type double-float new-x new-y))
                     ;; Move the left-top of the sub-graph to (x, y)
                     (gp:apply-translation transform new-x new-y)
                     (setf (gethash "svg-transform" new-table) transform)
-                    (create-renderer
-                     port 
-                     (plump-dom:get-element-by-id root-node id)
-                     root-node new-table)))
+                    (maphash (lambda (key val)
+                               (when (or (string= key "style")
+                                         (member key *svg-presentation-attributes* :test #'string=))
+                                 (plump:set-attribute shadow-child key val)))
+                             (plump:attributes child))
+                    (loop for child-child across (plump:children child)
+                          for copy = (clos:copy-standard-object child-child)
+                          do (plump-dom:append-child shadow-child copy))
+                    (create-renderer port shadow-child root-node new-table)))
                  (t
                   (let ((funcs (delete nil (loop for child across (plump-dom:children node)
                                                  when (plump-dom:element-p child)

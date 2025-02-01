@@ -17,6 +17,7 @@ We provide 2 ASDF systems: `lw-svg` , and `lw-svg-test` for testing. They depend
 - plump
 - serapeum
 - *parachute (only used in testing system)*
+- *dexador (only used in testing system)*
 
 ## Usage
 
@@ -91,7 +92,7 @@ The plugin has not fully covered the SVG specification yet. It may misbehave whe
 
 Here's what we're planning to do now:
 
-- [ ] Support specifying attributes with inline `style` attribute and CSS `style` element
+- [x] Support specifying attributes with inline `style` attribute and CSS `style` element
 - [ ] Support `text` and `tspan`
 - [ ] Support `image`, `marker` and `symbol` (and maybe `a`?)
 - [ ] Support gradients `spreadMethod` and `pattern`
