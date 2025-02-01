@@ -25,7 +25,30 @@
 ;; - Inline code span now overrides other inlines correctly
 
 (defpackage editor-markdown
-  (:add-use-defaults))
+  (:add-use-defaults)
+  (:export
+   *sans-serif-font-family-name*
+   *monospace-font-family-name*
+   *font-size*
+   *header-font-size-increasement*
+   md-link-face
+   md-bold-face
+   md-list-face
+   md-quote-face
+   md-table-face
+   md-image-face
+   md-header-face
+   md-italic-face
+   md-default-face
+   md-strikeout-face
+   md-code-span-face
+   md-code-block-face
+   md-bold-italic-face
+   md-strikethrough-face
+   update-face
+   fontify-syntactically-region
+   fontify-keywords-function))
+
 (in-package editor-markdown)
 
 (declaim (special *bold-font* *italic-font* *bold-italic-font* *strikethrough-font* *header-font* *mono-font* *mono-bold-font*))
@@ -785,25 +808,3 @@ that contain the inline-component."
                  (declare (ignore args))
                  (update-face))
                :after "Create default the tools")
-
-(export '(*sans-serif-font-family-name*
-          *monospace-font-family-name*
-          *font-size*
-          *header-font-size-increasement*
-          md-link-face
-          md-bold-face
-          md-list-face
-          md-quote-face
-          md-table-face
-          md-image-face
-          md-header-face
-          md-italic-face
-          md-default-face
-          md-strikeout-face
-          md-code-span-face
-          md-code-block-face
-          md-bold-italic-face
-          md-strikethrough-face
-          update-face
-          fontify-syntactically-region
-          fontify-keywords-function))
