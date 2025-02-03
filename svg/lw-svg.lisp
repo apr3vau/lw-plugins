@@ -15,6 +15,12 @@
   (:use #:string-case)
   (:import-from #:alexandria #:clamp #:copy-hash-table #:lerp #:ensure-gethash)
   (:import-from #:uiop #:string-prefix-p)
+  (:import-from #:color #:make-rgb #:make-hsv #:ensure-rgb #:color-red #:color-green #:color-blue #:color-alpha)
+  (:import-from
+   #:gp
+   #:make-transform #:premultiply-transforms #:postmultiply-transforms
+   #:apply-scale #:apply-translation #:apply-rotation #:apply-rotation-around-point
+   #:2pi #:pi-by-2 #:rectangle-bind)
   (:export
    rad-to-deg deg-to-rad hex-to-spec
    css-parse-url css-parse-angel css-parse-color css-parse-length
@@ -44,7 +50,7 @@
                     (6 (loop for i from 0 to 4 by 2 collect (subseq hex i (+ 2 i))))))
         (deno (if (< (length hex) 6) 15.0 255.0)))
     (when hex-list
-      (apply #'color:make-rgb
+      (apply #'make-rgb
              (mapcar (lambda (str) (/ (parse-integer str :radix 16) deno))
                      hex-list)))))
 
@@ -202,31 +208,52 @@ based on current graphics port, CSS viewport and element's parent."
 
 ;; CSS color
 
-(defvar *css-color-keywords* (make-hash-table :test #'equalp :size 17)
+(defvar *css-color-keywords* (make-hash-table :test #'equalp :size 149)
   "A map of CSS basic color keywords, from name to LW color spec.
 
 https://www.w3.org/TR/css-color-3/#html4")
 
-(dolist (i '(("black" "000000")
-             ("silver" "C0C0C0")
-             ("gray" "808080")
-             ("white" "FFFFFF")
-             ("maroon" "800000")
-             ("red" "FF0000")
-             ("purple" "800080")
-             ("fuchsia" "FF00FF")
-             ("green" "008000")
-             ("lime" "00FF00")
-             ("olive" "808000")
-             ("yellow" "FFFF00")
-             ("navy" "000080")
-             ("blue" "0000FF")
-             ("teal" "008080")
-             ("aqua" "00FFFF")))
+(dolist (i '(("aliceblue" "#F0F8FF")       ("antiquewhite" "#FAEBD7")      ("aqua" "#00FFFF")                 ("aquamarine" "#7FFFD4")
+             ("azure" "#F0FFFF")           ("beige" "#F5F5DC")             ("bisque" "#FFE4C4")               ("black" "#000000")
+             ("blanchedalmond" "#FFEBCD")  ("blue" "#0000FF")              ("blueviolet" "#8A2BE2")           ("brown" "#A52A2A")
+             ("burlywood" "#DEB887")       ("cadetblue" "#5F9EA0")         ("chartreuse" "#7FFF00")           ("chocolate" "#D2691E")
+             ("coral" "#FF7F50")           ("cornflowerblue" "#6495ED")    ("cornsilk" "#FFF8DC")             ("crimson" "#DC143C")
+             ("cyan" "#00FFFF")            ("darkblue" "#00008B")          ("darkcyan" "#008B8B")             ("darkgoldenrod" "#B8860B")
+             ("darkgray" "#A9A9A9")        ("darkgreen" "#006400")         ("darkgrey" "#A9A9A9")             ("darkkhaki" "#BDB76B")
+             ("darkmagenta" "#8B008B")     ("darkolivegreen" "#556B2F")    ("darkorange" "#FF8C00")           ("darkorchid" "#9932CC")
+             ("darkred" "#8B0000")         ("darksalmon" "#E9967A")        ("darkseagreen" "#8FBC8F")         ("darkslateblue" "#483D8B")
+             ("darkslategray" "#2F4F4F")   ("darkslategrey" "#2F4F4F")     ("darkturquoise" "#00CED1")        ("darkviolet" "#9400D3")
+             ("deeppink" "#FF1493")        ("deepskyblue" "#00BFFF")       ("dimgray" "#696969")              ("dimgrey" "#696969")
+             ("dodgerblue" "#1E90FF")      ("firebrick" "#B22222")         ("floralwhite" "#FFFAF0")          ("forestgreen" "#228B22")
+             ("fuchsia" "#FF00FF")         ("gainsboro" "#DCDCDC")         ("ghostwhite" "#F8F8FF")           ("gold" "#FFD700")
+             ("goldenrod" "#DAA520")       ("gray" "#808080")              ("green" "#008000")                ("greenyellow" "#ADFF2F")
+             ("grey" "#808080")            ("honeydew" "#F0FFF0")          ("hotpink" "#FF69B4")              ("indianred" "#CD5C5C")
+             ("indigo" "#4B0082")          ("ivory" "#FFFFF0")             ("khaki" "#F0E68C")                ("lavender" "#E6E6FA")
+             ("lavenderblush" "#FFF0F5")   ("lawngreen" "#7CFC00")         ("lemonchiffon" "#FFFACD")         ("lightblue" "#ADD8E6")
+             ("lightcoral" "#F08080")      ("lightcyan" "#E0FFFF")         ("lightgoldenrodyellow" "#FAFAD2") ("lightgray" "#D3D3D3")
+             ("lightgreen" "#90EE90")      ("lightgrey" "#D3D3D3")         ("lightpink" "#FFB6C1")            ("lightsalmon" "#FFA07A")
+             ("lightseagreen" "#20B2AA")   ("lightskyblue" "#87CEFA")      ("lightslategray" "#778899")       ("lightslategrey" "#778899")
+             ("lightsteelblue" "#B0C4DE")  ("lightyellow" "#FFFFE0")       ("lime" "#00FF00")                 ("limegreen" "#32CD32")
+             ("linen" "#FAF0E6")           ("magenta" "#FF00FF")           ("maroon" "#800000")               ("mediumaquamarine" "#66CDAA")
+             ("mediumblue" "#0000CD")      ("mediumorchid" "#BA55D3")      ("mediumpurple" "#9370DB")         ("mediumseagreen" "#3CB371")
+             ("mediumslateblue" "#7B68EE") ("mediumspringgreen" "#00FA9A") ("mediumturquoise" "#48D1CC")      ("mediumvioletred" "#C71585")
+             ("midnightblue" "#191970")    ("mintcream" "#F5FFFA")         ("mistyrose" "#FFE4E1")            ("moccasin" "#FFE4B5")
+             ("navajowhite" "#FFDEAD")     ("navy" "#000080")              ("oldlace" "#FDF5E6")              ("olive" "#808000")
+             ("olivedrab" "#6B8E23")       ("orange" "#FFA500")            ("orangered" "#FF4500")            ("orchid" "#DA70D6")
+             ("palegoldenrod" "#EEE8AA")   ("palegreen" "#98FD98")         ("paleturquoise" "#AFEEEE")        ("palevioletred" "#DB7093")
+             ("papayawhip" "#FFEFD5")      ("peachpuff" "#FFDAB9")         ("peru" "#CD853F")                 ("pink" "#FFC0CD")
+             ("plum" "#DDA0DD")            ("powderblue" "#B0E0E6")        ("purple" "#800080")               ("red" "#FF0000")
+             ("rosybrown" "#BC8F8F")       ("royalblue" "#4169E1")         ("saddlebrown" "#8B4513")          ("salmon" "#FA8072")
+             ("sandybrown" "#F4A460")      ("seagreen" "#2E8B57")          ("seashell" "#FFF5EE")             ("sienna" "#A0522D")
+             ("silver" "#C0C0C0")          ("skyblue" "#87CEEB")           ("slateblue" "#6A5ACD")            ("slategray" "#708090")
+             ("slategrey" "#708090")       ("snow" "#FFFAFA")              ("springgreen" "#00FF7F")          ("steelblue" "#4682B4")
+             ("tan" "#D2B48C")             ("teal" "#008080")              ("thistle" "#D8BFD8")              ("tomato" "#FF6347")
+             ("turquoise" "#40E0D0")       ("saddlebrown" "#8B4513")       ("violet" "#EE82EE")               ("wheat" "#F5DEB3")
+             ("white" "#FFFFFF")           ("whitesmoke" "#F5F5F5")        ("yellow" "#FFFF00")               ("yellowgreen" "#9ACD32")))
   (setf (gethash (first i) *css-color-keywords*)
         (hex-to-spec (second i))))
 
-(setf (gethash "transparent" *css-color-keywords*) (color:make-rgb 0.0 0.0 0.0 0.0))
+(setf (gethash "transparent" *css-color-keywords*) (make-rgb 0.0 0.0 0.0 0.0))
 
 ;; For scanning valid arguments of the numeric color function
 ;; e.g. rgb(255, 0, 0)
@@ -242,8 +269,8 @@ https://www.w3.org/TR/css-color-3/#numerical"
                (if (eql (char str (1- (length str))) #\%)
                  (/ (alexandria:clamp num 0 100) 100)
                  (/ (alexandria:clamp num 0 255) 255)))))
-      (let ((func (cond ((string-prefix-p "rgb" str) #'color:make-rgb)
-                        ((string-prefix-p "hsl" str) #'color:make-hsv))))
+      (let ((func (cond ((string-prefix-p "rgb" str) #'make-rgb)
+                        ((string-prefix-p "hsl" str) #'make-hsv))))
         (destructuring-bind (x y z) (mapcar #'parse-num (subseq params 0 3))
           (if (= (length params) 4)
             (let ((alpha (clamp (parse-float (nth 3 params)) 0.0 1.0)))
@@ -257,9 +284,7 @@ https://www.w3.org/TR/css-color-3/#numerical"
       (hex-to-spec str)
       (if (or (string-prefix-p "rgb" str) (string-prefix-p "hsl" str))
         (css-parse-numeric-color str)
-        (or (gethash str *css-color-keywords*)
-            ;; EASY hack for https://www.w3.org/TR/css-color-3/#svg-color
-            (color:get-color-translation (intern (string-upcase str) "KEYWORD")))))))
+        (gethash str *css-color-keywords*)))))
 
 ;; CSS angle
 
@@ -277,7 +302,7 @@ https://www.w3.org/TR/css3-values/#angles"
               ((search "rad" str :start2 end-pos :end2 (min len (+ end-pos 3)))
                (values num (+ end-pos 3)))
               ((search "turn" str :start2 end-pos :end2 (min len (+ end-pos 4)))
-               (values (* num gp:2pi) (+ end-pos 4)))
+               (values (* num 2pi) (+ end-pos 4)))
               ((search "deg" str :start2 end-pos :end2 (min len (+ end-pos 3)))
                (values (deg-to-rad num) (+ end-pos 3)))
               (t (values (deg-to-rad num) end-pos)))))))
@@ -333,24 +358,24 @@ https://www.w3.org/TR/css-transforms-1/#transform-property"
                           (split-sequence '(#\, #\Space) args-str :coalesce-separators t))
                          (t (css-parse-all-numbers-from-string args-str)))))
         (if (string= fname "matrix")
-          (push-end (apply #'gp:make-transform (coerce args 'list)) transforms)
-          (let ((trans (gp:make-transform)))
+          (push-end (apply #'make-transform (coerce args 'list)) transforms)
+          (let ((trans (make-transform)))
             (string-case (fname)
-              ("scale" (gp:apply-scale trans (aref args 0) (aref args (if (= (length args) 1) 0 1))))
-              ("scaleX" (gp:apply-scale trans (aref args 0) 1))
-              ("scaleY" (gp:apply-scale trans 1 (aref args 0)))
-              ("translate" (gp:apply-translation
+              ("scale" (apply-scale trans (aref args 0) (aref args (if (= (length args) 1) 0 1))))
+              ("scaleX" (apply-scale trans (aref args 0) 1))
+              ("scaleY" (apply-scale trans 1 (aref args 0)))
+              ("translate" (apply-translation
                             trans
                             (css-parse-length port (first args) :width viewport-w viewport-h parent-w parent-h)
                             (css-parse-length port (or (second args) (first args)) :height viewport-w viewport-h parent-w parent-h)))
-              ("translateX" (gp:apply-translation
+              ("translateX" (apply-translation
                              trans
                              (css-parse-length port (first args) :width viewport-w viewport-h parent-w parent-h)
                              1))
-              ("translateY" (gp:apply-translation
+              ("translateY" (apply-translation
                              trans 1
                              (css-parse-length port (first args) :height viewport-w viewport-h parent-w parent-h)))
-              ("rotate" (gp:apply-rotation trans (aref args 0)))
+              ("rotate" (apply-rotation trans (aref args 0)))
               ("skew"
                (setf (nth 1 trans) (tan (aref args 0)))
                (setf (nth 2 trans) (if (= (length args) 1) 0 (tan (aref args 0)))))
@@ -547,13 +572,13 @@ https://svgwg.org/svg2-draft/implnote.html#ArcImplementationNotes"
                (vy (/ (- y1p cyp) ry))
                (start (angle 1.0d0 0.0d0 vx vy))
                (sweep (mod (angle vx vy (/ (- (- x1p) cxp) rx) (/ (- (- y1p) cyp) ry))
-                           gp:2pi)))
+                           2pi)))
           (declare (type double-float start sweep))
           (if (= fs 0d0)
-            (when (plusp sweep) (setq sweep (- sweep gp:2pi)))
-            (when (minusp sweep) (setq sweep (- sweep gp:2pi))))
-          (let ((transform (gp:make-transform)))
-            (gp:apply-rotation-around-point transform fai cx cy)
+            (when (plusp sweep) (setq sweep (- sweep 2pi)))
+            (when (minusp sweep) (setq sweep (- sweep 2pi))))
+          (let ((transform (make-transform)))
+            (apply-rotation-around-point transform fai cx cy)
             (list :transform transform (list (list :arc (- cx rx) (- cy ry) (* rx 2.0) (* ry 2.0) (- start) (- sweep))))))))))
 
 (defstruct svg-path-command
@@ -594,8 +619,7 @@ GP:DRAW-PATH."
         last-quadratic-p
         last-move-p
         (path (make-array (length commands) :fill-pointer 0 :adjustable t)))
-    (declare (type double-float cpx cpy ocx2 ocy2 oqx oqy)
-             (type boolean last-cubic-p last-quadratic-p last-move-p))
+    (declare (type double-float cpx cpy ocx2 ocy2 oqx oqy))
     (macrolet ((push-path (data) `(vector-push-extend ,data path))
                (line-absolute (x y)
                  `(progn
@@ -961,8 +985,8 @@ GP:DRAW-PATH."
                 (lerp ratio
                       (funcall func (svg-gradient-stop-color before))
                       (funcall func (svg-gradient-stop-color after)))))
-         (color:make-rgb
-          (lerp-color #'color:color-red) (lerp-color #'color:color-green) (lerp-color #'color:color-blue)
+         (make-rgb
+          (lerp-color #'color-red) (lerp-color #'color-green) (lerp-color #'color-blue)
           (lerp ratio (svg-gradient-stop-opacity before) (svg-gradient-stop-opacity after)))))))
   
   (:method (x y (grad svg-radial-gradient))
@@ -1020,8 +1044,8 @@ GP:DRAW-PATH."
                          (lerp ratio
                                (funcall func (svg-gradient-stop-color before))
                                (funcall func (svg-gradient-stop-color after)))))
-                  (color:make-rgb
-                   (lerp-color #'color:color-red) (lerp-color #'color:color-green) (lerp-color #'color:color-blue)
+                  (make-rgb
+                   (lerp-color #'color-red) (lerp-color #'color-green) (lerp-color #'color-blue)
                    (lerp ratio (svg-gradient-stop-opacity before) (svg-gradient-stop-opacity after)))))))))))
 
 
@@ -1072,7 +1096,7 @@ GP:DRAW-PATH."
            ((search "url" val) (css-parse-url val root-node))
            (t (css-parse-color val))))
     ("stroke-dasharray" (when (stringp val)
-                          (gp:rectangle-bind (x y w h)
+                          (rectangle-bind (x y w h)
                               (gethash "viewBox" container-attributes)
                             (declare (ignore x y))
                             (mapcar #'round
@@ -1085,7 +1109,7 @@ GP:DRAW-PATH."
                       :test #'string-equal)
               (when val
                 (if (stringp val)
-                  (gp:rectangle-bind (x y w h)
+                  (rectangle-bind (x y w h)
                       (gethash "viewBox" container-attributes)
                     (declare (ignore x y))
                     (css-parse-length
@@ -1143,7 +1167,7 @@ element."
                 port container-attributes root-node))
              (run-draw-path (trans-origin-x trans-origin-y path)
                (declare (type double-float trans-origin-x trans-origin-y))
-               (let* ((transform (gp:make-transform))
+               (let* ((transform (make-transform))
                       (svg-transform (gethash "svg-transform" container-attributes))
                       (container-transforms (gethash "container-transforms" container-attributes))
                       (self-transforms (gethash "transform" new-attrs))
@@ -1164,7 +1188,7 @@ element."
                                   :line-end-style linecap :line-join-style linejoin
                                   :dashed (if dash t nil) :dash dash)))
                  ;; These transforms has not been parsed, so parse them first
-                 (gp:rectangle-bind (x y w h)
+                 (rectangle-bind (x y w h)
                      (gethash "viewBox" container-attributes)
                    (declare (ignore x y))
                    (when self-transforms
@@ -1179,12 +1203,12 @@ element."
                             port container-transforms w h
                             (gethash "width" container-attributes)
                             (gethash "height" container-attributes)))))
-                 (gp:apply-translation transform (- trans-origin-x) (- trans-origin-y))
+                 (apply-translation transform (- trans-origin-x) (- trans-origin-y))
                  (dolist (trans (append self-transforms container-transforms))
-                   (gp:premultiply-transforms transform trans))
-                 (gp:apply-translation transform trans-origin-x trans-origin-y)
+                   (premultiply-transforms transform trans))
+                 (apply-translation transform trans-origin-x trans-origin-y)
                  ;; Apply svg-transform in the end. It's relative with (0, 0);
-                 (when svg-transform (gp:postmultiply-transforms transform svg-transform))
+                 (when svg-transform (postmultiply-transforms transform svg-transform))
                  (setq args (nconc args (list :transform transform)))
                  (when (plump-dom:node-p stroke)
                    (setq stroke :black))
@@ -1193,11 +1217,11 @@ element."
                           (if (stringp val) (clamp (parse-float val) 0.0 1.0) (if val 1.0 nil)))
                         (with-alpha (color alpha)
                           (when color
-                            (setq color (color:ensure-rgb (color:get-color-spec color)))
-                            (color:make-rgb (color:color-red color)
-                                            (color:color-green color)
-                                            (color:color-blue color)
-                                            (* (color:color-alpha color) alpha)))))
+                            (setq color (ensure-rgb (color:get-color-spec color)))
+                            (make-rgb (color-red color)
+                                      (color-green color)
+                                      (color-blue color)
+                                      (* (color-alpha color) alpha)))))
                    (when-let (op (or (parse-opacity (gethash "fill-opacity" container-attributes))
                                      (parse-opacity (gethash "opacity" container-attributes))))
                      (setq fill (with-alpha fill op)))
@@ -1216,7 +1240,7 @@ element."
                          (grad-units (gethash "gradientUnits" (plump-dom:attributes fill)))
                          left top right bottom)
                      ;; Parse gradient transforms
-                     (gp:rectangle-bind (x y w h)
+                     (rectangle-bind (x y w h)
                          (gethash "viewBox" container-attributes)
                        (declare (ignore x y))
                        (if grad-trans
@@ -1224,7 +1248,7 @@ element."
                                (css-parse-transforms port grad-trans w h
                                                      (gethash "width" container-attributes)
                                                      (gethash "height" container-attributes)))
-                         (setq grad-trans (gp:make-transform)))
+                         (setq grad-trans (make-transform)))
                        ; Parse gradient units and find corresponding drawing box
                        (if (equal grad-units "userSpaceOnUse")
                          (setq left 0 top 0 right w bottom h)
@@ -1270,9 +1294,9 @@ element."
                      `((:move ,x ,y) (:line ,(+ x w) ,y) (:line ,(+ x w) ,(+ y h)) (:line ,x ,(+ y h)) (:close))
                      (let ((2rx (* rx 2d0))
                            (2ry (* ry 2d0))
-                           (-pi-by-2 (- gp:pi-by-2)))
-                       `((:move ,(+ x rx) ,y) (:line ,(- (+ x w) rx) ,y) (:arc ,(- (+ x w) 2rx) ,y ,2rx ,2ry ,gp:pi-by-2 ,-pi-by-2)
-                         (:line ,(+ x w) ,(- (+ y h) ry)) (:arc ,(- (+ x w) 2rx) ,(- (+ y h) 2ry) ,2rx ,2ry 0d0 ,(- gp:fpi-by-2))
+                           (-pi-by-2 (- pi-by-2)))
+                       `((:move ,(+ x rx) ,y) (:line ,(- (+ x w) rx) ,y) (:arc ,(- (+ x w) 2rx) ,y ,2rx ,2ry ,pi-by-2 ,-pi-by-2)
+                         (:line ,(+ x w) ,(- (+ y h) ry)) (:arc ,(- (+ x w) 2rx) ,(- (+ y h) 2ry) ,2rx ,2ry 0d0 ,-pi-by-2)
                          (:line ,(+ x rx) ,(+ y h)) (:arc ,x ,(- (+ y h) 2ry) ,2rx ,2ry ,-pi-by-2 ,-pi-by-2)
                          (:line ,x ,(+ y ry)) (:arc ,x ,y ,2rx ,2ry ,(- pi) ,-pi-by-2)
                          (:close)))))))
@@ -1351,7 +1375,7 @@ element."
                     (let ((viewbox (if-let (val (gethash "viewBox" new-attrs))
                                        (coerce (css-parse-all-numbers-from-string val) 'list)
                                      nil)))
-                      (gp:rectangle-bind (viewbox-l viewbox-t viewbox-w viewbox-h)
+                      (rectangle-bind (viewbox-l viewbox-t viewbox-w viewbox-h)
                           viewbox
                         (declare (type double-float viewbox-l viewbox-t viewbox-w viewbox-h))
                         (let* ((new-x (if-let (val (gethash "x" new-attrs))
@@ -1362,7 +1386,7 @@ element."
                                         0d0))
                                (new-w (svg-parse-attribute-by-name "width" (gethash "width" new-attrs) port container-attributes root-node))
                                (new-h (svg-parse-attribute-by-name "height" (gethash "height" new-attrs) port container-attributes root-node))
-                               (transform (gp:make-transform))
+                               (transform (make-transform))
                                (preserve-aspect (if-let (val (gethash "preserveAspectRatio" new-attrs))
                                                     (split-sequence '(#\Space) val)
                                                   '("xMidYMid" "meet")))
@@ -1378,11 +1402,11 @@ element."
                               (progn
                                 ;; Scale viewBox to fit SVG `width` and `height`
                                 (when (and viewbox (or new-w new-h))
-                                  (gp:apply-scale transform
-                                                  (/ (the double-float (or new-w viewbox-w)) viewbox-w)
-                                                  (/ (the double-float (or new-h viewbox-h)) viewbox-h)))
+                                  (apply-scale transform
+                                               (/ new-w viewbox-w)
+                                               (/ new-h viewbox-h)))
                                 ;; Move the left-top of the viewBox to (x, y)
-                                (gp:apply-translation transform new-x new-y))
+                                (apply-translation transform new-x new-y))
                               (let* ((xalign (subseq align 0 4))
                                      (yalign (subseq align 4 8))
                                      (svg-align-x 0d0)
@@ -1406,22 +1430,22 @@ element."
                                   ("YMax" (setq svg-align-y (+ new-y new-h)
                                                 viewbox-align-y (+ viewbox-t viewbox-h))))
                                 ;; Apply scaling, and align selected points
-                                (gp:apply-translation transform (- viewbox-align-x) (- viewbox-align-y))
+                                (apply-translation transform (- viewbox-align-x) (- viewbox-align-y))
                                 (let* ((x-ratio (/ new-w viewbox-w))
                                        (y-ratio (/ new-h viewbox-h))
                                        (ratio (if (string= scale "meet")
                                                 (min x-ratio y-ratio)
                                                 (max x-ratio y-ratio))))
-                                  (gp:apply-scale transform ratio ratio))
-                                (gp:apply-translation transform svg-align-x svg-align-y))))
+                                  (apply-scale transform ratio ratio))
+                                (apply-translation transform svg-align-x svg-align-y))))
                           ;; If the element itself is `svg`, we assume the transform-origin is 0, 0;
                           ;; no additional translation needed, so we just multiply them into the svg-transform
                           (when-let (container-transforms (gethash "container-transforms" new-table))
                             (dolist (trans container-transforms)
-                              (gp:postmultiply-transforms transform trans))
+                              (postmultiply-transforms transform trans))
                             (remhash "container-transforms" new-table))
                           (when-let (prev-transform (gethash "svg-transform" container-attributes))
-                            (gp:postmultiply-transforms transform prev-transform))
+                            (postmultiply-transforms transform prev-transform))
                           ;; Store modified attributes
                           (setf (gethash "svg-transform" new-table) transform
                                 (gethash "viewBox" new-table) viewbox
@@ -1445,7 +1469,7 @@ element."
                                   0d0))
                          (transform (if-let (val (gethash "svg-transform" container-attributes))
                                         (gp:copy-transform val)
-                                      (gp:make-transform)))
+                                      (make-transform)))
                          (child (plump-dom:get-element-by-id root-node id))
                          ; Make a shadow tree
                          (shadow-child (make-instance 'plump:element
@@ -1455,7 +1479,7 @@ element."
                                                       :attributes (plump:attributes node))))
                     (declare (type double-float new-x new-y))
                     ;; Move the left-top of the sub-graph to (x, y)
-                    (gp:apply-translation transform new-x new-y)
+                    (apply-translation transform new-x new-y)
                     (setf (gethash "svg-transform" new-table) transform)
                     (maphash (lambda (key val)
                                (when (or (string= key "style")
