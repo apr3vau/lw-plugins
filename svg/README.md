@@ -42,7 +42,7 @@ You are supposed to see a gray right-chevron at the left-top of the `output-pane
 
 ### Cache renderer for faster redisplay
 
-*Function* **create-renderer** *port* *root-node* *node* *`&optional`* *container-attributes* => *function*
+*Function* **create-renderer** *port* *node* *`&optional`* *(root-node node) (container-attributes (make-hash-table :test #'equalp))* => *function*
 
 The funcion `create-renderer` accepts a `plump:node` *node,* which should be a valid SVG element, and will parse it into a "renderer function". The `port` should be a graphics port that is only used to query graphic information like geometry, font size and so on. `root-node` refers to the DOM root of the SVG element, it's used to search referenced elements by ID; `container-attributes` is used to store inherited attributes in recursive parsing.
 
