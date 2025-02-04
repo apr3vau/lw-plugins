@@ -12,7 +12,8 @@
                (:file "expand-region")
                (:file "flex-complete")
                (:file "pair")
-               (:file "side-tree")))
+               (:file "side-tree")
+               (:file "yank-from-kill-ring")))
 
 (defsystem lw-plugins/nerd-icons
   :author "April & May"

@@ -4,6 +4,7 @@ Here's the LispWorks Plugins created by April & May. All plugins are zero-depend
 
 Here we provide:
 
+- [NEW] Emacs-like `yank-from-kill-ring` (Pop-up paste selection with M-y). ([yank-from-kill-ring.lisp](./yank-from-kill-ring.lisp))
 - [NEW] Pure-Lisp SVG rendering with LispWorks Graphics Port ([lw-svg](./svg/))
 - [NEW] Terminal Utilities for LispWorks, includes a functional Unix PTY running with the Editor, and a stream that can cope with ANSI escape sequences ([term.lisp](./term.lisp))
 - [NEW] A docstring folding facility, similar with definition folding([docstring-folding.lisp](./docstring-folding.lisp))
