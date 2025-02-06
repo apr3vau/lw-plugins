@@ -68,7 +68,10 @@
 ;; Interactive test
 
 (defparameter *interactive-tests*
-  '(("Use element and CSS style" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/struct/Use-changed-styles.svg")
+  '(("Text and tspan" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/text/tspan01.svg")
+    ("Text rotation 1" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/text/tspan04.svg")
+    ("Text rotation 2" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/text/tspan05.svg")
+    ("Use element and CSS style" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/struct/Use-changed-styles.svg")
     ("Path quadratic bezier" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/quad01.svg")
     ("Path arc" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/arcs01.svg")
     ("Retangle and transform" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/rect02.svg")
