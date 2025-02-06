@@ -1274,7 +1274,6 @@ element."
                      (svg-transform (gethash "svg-transform" container-attributes))
                      (container-transforms (gethash "container-transforms" container-attributes))
                      (self-transforms (gethash "transform" new-attrs)))
-                 ;(print (list svg-transform container-transforms self-transforms node))
                  ;; These transforms has not been parsed, so parse them first
                  (rectangle-bind (x y w h)
                      (gethash "viewBox" container-attributes)
@@ -1337,7 +1336,6 @@ element."
                            (gp:with-pixmap-graphics-port (pixmap port capi:%width% capi:%height% :relative t :collect t)
                              (gp:draw-path pixmap path 0 0)
                              (multiple-value-setq (left top right bottom) (gp:get-bounds pixmap))))))
-                     (print grad-trans)
                      (let ((grad (svg-parse-gradient fill left top right bottom)))
                        (lambda (port)
                          (gp:with-graphics-mask (port (list :path path :fill-rule fill-rule) :mask-transform transform)
@@ -1376,22 +1374,24 @@ element."
                       (shift-y (pop (gethash "text-dy" container-attributes)))
                       (rotate (pop (gethash "text-rotate" container-attributes)))
                       (x1 (or text-x
-                              (+ (gethash "text-prev-x" container-attributes 0)
-                                 (gethash "text-total-width" container-attributes 0))))
+                              (+ (or (gethash "text-prev-x" container-attributes) 0)
+                                 (or (gethash "text-total-width" container-attributes) 0))))
                       (dx1 (or shift-x
-                               (gethash "text-prev-dx" container-attributes 0)))
+                               (gethash "text-prev-dx" container-attributes)
+                               0))
                       (y1 (or text-y
-                              (+ (gethash "text-prev-y" container-attributes 0)
-                                 (gethash "text-total-height" container-attributes 0))))
+                              (+ (or (gethash "text-prev-y" container-attributes) 0)
+                                 (or (gethash "text-total-height" container-attributes) 0))))
                       (dy1 (or shift-y
-                               (gethash "text-prev-dy" container-attributes 0)))
+                               (gethash "text-prev-dy" container-attributes)
+                               0))
                       (r1 (or rotate
-                              (gethash "text-prev-rotate" container-attributes 0)))
+                              (gethash "text-prev-rotate" container-attributes)
+                              0))
                       (x (+ x1 dx1))
                       (y (+ y1 dy1))
                       (char-width (gp:get-char-width port char font))
                       (char-height (gp:get-font-height port font))
-                      ;(char-ascent (gp:get-char-ascent port char font))
                       (fill (get-fill)))
                  (when text-x
                    (setf (gethash "text-prev-x" container-attributes) text-x
@@ -1410,7 +1410,6 @@ element."
                     (setf (gethash "text-total-height" container-attributes)
                           (+ (gethash "text-total-height" container-attributes 0)
                              char-height))))
-                 (print (list char rotate (gethash "text-prev-rotate" container-attributes)))
                  (unless (whitespace-char-p char)
                    (let ((new-transform (make-transform)))
                      (apply-rotation-around-point new-transform r1 x y)
