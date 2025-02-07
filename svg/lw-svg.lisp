@@ -1441,15 +1441,19 @@ element."
         ("path" (run-draw-path
                  0d0 0d0
                  (convert-path-commands (svg-parse-path-data (gethash "d" new-attrs)))))
-        ("rect" (let ((x (get-a-length "x"))
-                      (y (get-a-length "y"))
-                      (w (get-a-length "width"))
-                      (h (get-a-length "height"))
+        ("rect" (let ((x (or (get-a-length "x") 0d0))
+                      (y (or (get-a-length "y") 0d0))
+                      (w (or (get-a-length "width") (svg-parse-length "100%" :width)))
+                      (h (or (get-a-length "height") (svg-parse-length "100%" :height)))
                       (rx (get-a-length "rx"))
                       (ry (get-a-length "ry")))
                   (declare (type double-float x y w h))
-                  (cond ((and rx (null ry)) (setq ry (min (/ h 2d0) (* (/ rx w) h))))
-                        ((and (null rx) ry) (setq rx (min (/ w 2d0) (* (/ ry h) w)))))
+                  (cond ((and rx (or (null ry) (equal ry "auto")))
+                         (setq rx (svg-parse-length rx :width)
+                               ry (min (/ h 2d0) (* (/ rx w) h))))
+                        ((and ry (or (null rx) (equal rx "auto")))
+                         (setq ry (svg-parse-length ry :height)
+                               rx (min (/ w 2d0) (* (/ ry h) w)))))
                   (run-draw-path
                    x y
                    (if (or (null rx) (and (= rx 0d0) (= ry 0d0)))
@@ -1462,14 +1466,25 @@ element."
                          (:line ,(+ x rx) ,(+ y h)) (:arc ,x ,(- (+ y h) 2ry) ,2rx ,2ry ,-pi-by-2 ,-pi-by-2)
                          (:line ,x ,(+ y ry)) (:arc ,x ,y ,2rx ,2ry ,(- pi) ,-pi-by-2)
                          (:close)))))))
-        ("circle" (let ((cx (get-a-length "cx"))
-                        (cy (get-a-length "cy"))
-                        (r (get-a-length "r")))
+        ("circle" (let ((cx (or (get-a-length "cx") 0d0))
+                        (cy (or (get-a-length "cy") 0d0))
+                        (r (or (get-a-length "r") 0d0)))
                     (declare (type double-float cx cy r))
                     (run-draw-path cx cy (list (list :arc (- cx r) (- cy r) (* r 2d0) (* r 2d0) 0d0 2pi t)))))
-        ("ellipse" (let ((cx (get-a-length "cx")) (cy (get-a-length "cy"))
-                         (rx (get-a-length "rx")) (ry (get-a-length "ry")))
-                     (declare (type double-float cx cy rx ry))
+        ("ellipse" (let ((cx (or (get-a-length "cx") 0d0))
+                         (cy (or (get-a-length "cy") 0d0))
+                         (rx (get-attr "rx"))
+                         (ry (get-attr "ry")))
+                     (declare (type double-float cx cy))
+                     (cond ((and rx (or (null ry) (equal ry "auto")))
+                            (setq rx (svg-parse-length rx :width)
+                                  ry rx))
+                           ((and ry (or (null rx) (equal rx "auto")))
+                            (setq ry (svg-parse-length ry :height)
+                                  rx ry))
+                           ((null rx) (setq rx 0d0 ry 0d0))
+                           (t (setq rx (svg-parse-length rx :width)
+                                    ry (svg-parse-length ry :height))))
                      (run-draw-path cx cy (list (list :arc (- cx rx) (- cy ry) (* rx 2d0) (* ry 2d0) 0d0 2pi t)))))
         ("line" (let ((x1 (get-a-length "x1")) (y1 (get-a-length "y1"))
                       (x2 (get-a-length "x2")) (y2 (get-a-length "y2")))
@@ -1741,3 +1756,111 @@ the source code of this function about how to do."
     (gp:with-graphics-translation (port x y)
       (let ((renderer (create-renderer port svg)))
         (funcall renderer port)))))
+
+;; Interactive test
+;; Can only running with LispWorks Macintosh.
+;; It requires DEXADOR package:
+;; (ql:quickload :dexador)
+
+(defparameter *interactive-tests*
+  '(("Text and tspan" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/text/tspan01.svg")
+    ("Text rotation 1" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/text/tspan04.svg")
+    ("Text rotation 2" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/text/tspan05.svg")
+    ("Use element and CSS style" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/struct/Use-changed-styles.svg")
+    ("Path quadratic bezier" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/quad01.svg")
+    ("Path arc" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/paths/arcs01.svg")
+    ("Retangle and transform" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/rect02.svg")
+    ("Ellipse and transform" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/ellipse01.svg")
+    ("Line and stroke-width" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/line01.svg")
+    ("Polyline" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/polyline01.svg")
+    ("Polygon" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/shapes/polygon01.svg")
+    ("Dashed stroke" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/painting/dashes.svg")
+    ("Fill rule nonzero" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/painting/fillrule-nonzero.svg")
+    ("Fill rule evenodd" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/painting/fillrule-evenodd.svg")
+    ("Groups and Opacity" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/masking/opacity01.svg")
+    ("Linear gradient" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/pservers/lingrad01.svg")
+    ("Radial gradient" "https://www.w3.org/TR/2018/CR-SVG2-20181004/images/pservers/radgrad01.svg")))
+
+#+nil
+(capi:define-interface interactive-test-interface ()
+  ((i :initform 0)
+   (name :initform (first (first *interactive-tests*)))
+   (url :initform (second (first *interactive-tests*)))
+   (wrong :initform nil))
+  (:panes
+   (browser
+    capi:browser-pane
+    :url url
+    :visible-min-width 500
+    :visible-min-height 500)
+   (output
+    capi:output-pane
+    :visible-min-width 500
+    :visible-min-height 500
+    :background :white
+    :foreground :black
+    :display-callback (lambda (pane x y w h)
+                        (declare (ignore x y w h))
+                        (draw-svg-from-string
+                         pane
+                         (dex:get (slot-value (capi:element-interface pane) 'url) :force-string t)
+                         0 0)))
+   (buttons
+    capi:push-button-panel
+    :items '(:yes :no)
+    :selection-callback
+    (lambda (data itf)
+      (with-slots (i name url browser output wrong) itf
+        (when (eql data :no)
+          (push name wrong))
+        (incf i)
+        (if (>= i (length *interactive-tests*))
+          (progn
+            (if wrong
+              (capi:prompt-with-list
+                 wrong
+                 (format nil "Test finished with ~A/~A errors." (length wrong) (length *interactive-tests*)))
+              (capi:prompt-with-message "All test are passed!"))
+            (capi:quit-interface itf))
+          (progn
+            (setf (capi:interface-title itf) (format nil "~A/~A ~A"
+                                                     (1+ i) (1+ (length *interactive-tests*))
+                                                     (first (nth i *interactive-tests*)))
+                  url (second (nth i *interactive-tests*)))
+            (capi:browser-pane-navigate browser url)
+            (gp:invalidate-rectangle output)))))))
+  (:layouts
+   (main-layout
+    capi:column-layout
+    '(displayers-row buttons)
+    :title "Compare if two images are same"
+    :title-position :frame
+    :adjust :center)
+   (displayers-row
+    capi:row-layout
+    '(browser output)))
+  (:default-initargs
+   :title (format nil "1/~A ~A" (1+ (length *interactive-tests*)) (first (first *interactive-tests*)))))
+
+;(capi:display (make-instance 'interactive-test-interface))
+
+#|
+(capi:contain
+ (make-instance
+  'capi:output-pane
+  :display-callback
+  (lambda (port x y w h)
+    (loop for i from 0
+          for svg in (serapeum:repeat-sequence (directory "~/svg-test/*.svg") 4)
+          do (multiple-value-bind (y x) (floor i 24)
+               (draw-svg-from-string port svg (* x 32) (* y 32)))))))
+
+(setq test (capi:prompt-for-string ""))
+
+(capi:contain
+ (make-instance
+  'capi:output-pane
+  :display-callback
+  (lambda (port x y w h)
+    (draw-svg-from-string port test 0 0))))
+  |#

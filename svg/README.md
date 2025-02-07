@@ -16,8 +16,6 @@ We provide 2 ASDF systems: `lw-svg` , and `lw-svg-test` for testing. They depend
 - cl-ppcre
 - plump
 - serapeum
-- *parachute (only used in testing system)*
-- *dexador (only used in testing system)*
 
 ## Usage
 
@@ -107,7 +105,7 @@ Here's what we're planning to do now:
 
 ### Testing
 
-There's two part in `lw-svg-test`, one is using `parachute`, and is mainly used to check static parsing result; Another is "interactive test", it will load a same SVG side-by-side, one using the `capi:browser-pane`, another using the `capi:output-pane` with `lw-svg` library. It allows us to compare and check if the two images are identical on the screen. Images used for test are example images shown on W3C's SVG specification. You need LispWorks for Macintosh to run the interactive test, as `capi:browser-pane` does not support other Unix, and on Windows it is too old to use.
+At the end of the [lw-svg.lisp](./lw-svg.lisp) there's an "interactive test", it will load a same SVG side-by-side, one using the `capi:browser-pane`, another using the `capi:output-pane` with `lw-svg` library. It allows us to compare and check if the two images are identical on the screen. Images used for test are example images shown on W3C's SVG specification. You need LispWorks for Macintosh to run the interactive test, as `capi:browser-pane` does not support other Unix, and on Windows it is too old to use.
 
 ---
 
