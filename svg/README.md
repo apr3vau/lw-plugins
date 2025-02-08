@@ -79,6 +79,10 @@ The plugin has not fully covered the SVG specification yet. It may misbehave whe
   - fill
   - fill-opacity
   - fill-rule
+  - font-family
+  - font-size
+  - font-weight
+  - font-style
   - opacity
   - stop-color
   - stop-opacity
@@ -89,12 +93,14 @@ The plugin has not fully covered the SVG specification yet. It may misbehave whe
   - stroke-opacity
   - stroke-width
   - transform
+  - _writing-mode_
 
 Here's what we're planning to do now:
 
 - [x] Support specifying attributes with inline `style` attribute and CSS `style` element
 - [ ] Support `text` and `tspan`
   - [x] `x`, `y`, `dx`, `dy`, `rotate`
+  - [ ] Character and word spacing
   - [ ] SVG2 Content area & SVG tiny `textArea`
   - [ ] ...
   

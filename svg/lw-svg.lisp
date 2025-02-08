@@ -14,7 +14,6 @@
 (defpackage lw-svg
   (:use #:string-case)
   (:import-from #:alexandria #:clamp #:copy-hash-table #:lerp #:ensure-gethash)
-  (:import-from #:uiop #:string-prefix-p)
   (:import-from #:color #:make-rgb #:make-hsv #:ensure-rgb #:color-red #:color-green #:color-blue #:color-alpha)
   (:import-from
    #:gp
@@ -53,6 +52,9 @@
       (apply #'make-rgb
              (mapcar (lambda (str) (/ (parse-integer str :radix 16) deno))
                      hex-list)))))
+
+(defun string-prefix-p (prefix string)
+  (string-equal prefix string :end2 (length prefix)))
 
 ;; Why I'm prefer using CL's convention `NFOO` but not Scheme's `FOO!` XD...
 (defun nmerge-tables (table &rest tables)
