@@ -1640,13 +1640,13 @@ element."
                           (cond ((and (null new-w) new-h) (setq new-w new-h))
                                 ((and new-w (null new-h)) (setq new-h new-w))
                                 ((null new-h) (setq new-w viewbox-w new-h viewbox-h)))
+                          (setq new-w (round new-w)
+                                new-h (round new-h))
                           (if (string= align "none") ; Do not preserve aspect
                             (progn
                               ;; Scale viewBox to fit SVG `width` and `height`
                               (when (and viewbox (or new-w new-h))
-                                (apply-scale transform
-                                             (/ new-w viewbox-w)
-                                             (/ new-h viewbox-h)))
+                                (apply-scale transform (/ new-w viewbox-w) (/ new-h viewbox-h)))
                               ;; Move the left-top of the viewBox to (x, y)
                               (apply-translation transform new-x new-y))
                             (let* ((xalign (subseq align 0 4))
@@ -1721,7 +1721,7 @@ element."
                                                       :children (plump:make-child-array)
                                                       :attributes (plump:attributes child))))
                     (if child
-                      (progn ;; Move the left-top of the sub-graph to (x, y)
+                      (progn ; Move the left-top of the sub-graph to (x, y)
                         (apply-translation transform new-x new-y)
                         (setf (gethash "svg-transform" new-table) transform)
                         (maphash (lambda (key val)
