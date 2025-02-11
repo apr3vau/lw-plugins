@@ -21,7 +21,7 @@
 
 (defun docstring-folding-change-state (overlay invisible)
   (overlay-put overlay 'invisible invisible)
-  (overlay-put overlay 'before-string (if invisible  "..." nil)))
+  (overlay-put overlay 'after-string (if invisible '("..." . font-lock-string-face) nil)))
 
 (defun docstring-folding-overlay-make-visible (overlay)
   (when (overlay-get overlay '%%docstring-folding%%)
@@ -37,8 +37,7 @@
     (overlay-put overlay 'isearch-open-invisible 'docstring-folding-overlay-make-visible)
     (overlay-put overlay 'isearch-open-invisible-temporary 'docstring-folding-overlay-set-visible)
     (overlay-put overlay 'invisible t)
-    (overlay-put overlay 'before-string "...")
-    (overlay-put overlay 'face *font-lock-string-face*)
+    (overlay-put overlay 'after-string '("..." . font-lock-string-face))
     overlay))
 
 (defun docstring-folding-map-overlays (buffer func &rest args)

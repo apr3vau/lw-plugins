@@ -11,8 +11,11 @@
                (:file "editor-markdown")
                (:file "expand-region")
                (:file "flex-complete")
+               (:file "highlight")
+               (:file "line-number")
                (:file "pair")
                (:file "side-tree")
+               (:file "visual-line")
                (:file "yank-from-kill-ring")))
 
 (defsystem lw-plugins/nerd-icons
