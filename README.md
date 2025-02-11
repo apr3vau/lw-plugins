@@ -18,6 +18,7 @@ Here we provide:
   - [Pair-Editing (electric-pair-mode)](#pair-editing)
   - [Side Tree (Treemacs)](#side-tree)
   - [NEW] [Visual Line Mode](#visual-line-mode)
+  - [NEW] [Yank from kill-ring](#yank-from-kill-ring)
 - Others
   - [Pure Lisp SVG renderer](./svg/)
   - [Unix PTY terminal & Ansi Escape Sequence support with Editor](#terminal-utilities)
@@ -237,6 +238,14 @@ Useful for working in Editor with Serif fonts, or has long truncated lines.
 Similar with `visual-line-mode` in Emacs. With the mode turned on, the default cursor moving functions will be replaced to Visual version, which will move the cursor by its pixel position instead of logical place.
 
 It may be useful for those who want to ship applications that using Serif font in Editor.
+
+### Yank from kill-ring
+
+[Source](./yank-from-kill-ring.lisp)
+
+> Load the `lw-plugins` system, Press `M-y` to trigger the pop-up.
+
+Since Emacs 28, Press `M-y` without `C-y` before will pop-up a buffer with the kill-ring contents, allow users to select previous killed text. This plugin implements this function in LW Editor.
 
 ### Terminal Utilities
 
