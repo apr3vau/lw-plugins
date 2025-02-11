@@ -25,7 +25,7 @@ highlight.")
   (declare (ignore args))
   (let* ((buffer (or buffer (current-buffer)))
          (point (buffer-point buffer))
-         (region (variable-value-if-bound 'highlight-current-line-region :buffer buffer)))
+         (region (buffer-value buffer 'highlight-current-line-region)))
     (when region
       (destructuring-bind (start end tick) region
         (when (and (= tick (buffer-modified-tick buffer))
@@ -46,7 +46,7 @@ highlight.")
           (new-end (copy-point point)))
       (move-to-column new-start 0)
       (unless (line-offset new-end 1 0)
-        (setf (variable-value 'highlight-current-line-region :buffer buffer) nil)
+        (setf (buffer-value buffer 'highlight-current-line-region) nil)
         (return-from highlight-current-line))
       (alter-text-property
        new-start new-end 'face
@@ -56,12 +56,12 @@ highlight.")
            (if value (list value 'highlight-current-line-face)
              'highlight-current-line-face)))
        :modification nil)
-      (setf (variable-value 'highlight-current-line-region :buffer buffer)
+      (setf (buffer-value buffer 'highlight-current-line-region)
             (list new-start new-end (buffer-modified-tick buffer))))))
 
 (defmode "Highlight Current Line"
   :cleanup-function (lambda (buffer)
-                      (when-let (region (variable-value-if-bound 'highlight-current-line-region :buffer buffer))
+                      (when-let (region (buffer-value buffer 'highlight-current-line-region))
                         (destructuring-bind (start end tick) region
                           (declare (ignore tick))
                           (when (and (good-point-p start) (good-point-p end))
@@ -75,7 +75,7 @@ highlight.")
                              :modification nil)
                             (delete-point start)
                             (delete-point end))
-                          (setf (variable-value 'highlight-current-line-region :buffer buffer) nil)))))
+                          (setf (buffer-value buffer 'highlight-current-line-region) nil)))))
 
 (defun highlight-current-line-on-window (window)
   (let ((buffer (window-buffer window)))
@@ -129,7 +129,7 @@ Return a list of (START END) points."
   (declare (ignore args))
   (let* ((buffer (or buffer (current-buffer)))
          (point (buffer-point buffer))
-         (old-sym-str (variable-value-if-bound 'current-highlighted-symbol-string :buffer buffer))
+         (old-sym-str (buffer-value buffer 'current-highlighted-symbol-string))
          (sym-str (read-symbol-from-point :point point :read-package-name t :previous t)))
     (flet ((remove-old ()
              ;; Because the function can be triggered after modifications,
@@ -152,7 +152,7 @@ Return a list of (START END) points."
             (return-from highlight-current-symbol)
             (remove-old))
           (when (and sym-str (> (length sym-str) 0))
-            (setf (variable-value 'current-highlighted-symbol-string :buffer buffer) sym-str)
+            (setf (buffer-value buffer 'current-highlighted-symbol-string) sym-str)
             (let ((regions (search-all-matched-symbol-names buffer sym-str)))
               (loop for (start end) in regions
                     do (alter-text-property
@@ -165,10 +165,9 @@ Return a list of (START END) points."
                         :modification nil)))))
         (progn
           (remove-old)
-          (setf (variable-value 'current-highlighted-symbol-string :buffer buffer) nil))))))
+          (setf (buffer-value buffer 'current-highlighted-symbol-string) nil))))))
 
 (defmode "Highlight Current Symbol"
-  :aliases 
   :cleanup-function (lambda (buffer)
                       (alter-text-property
                        (buffers-start buffer) (buffers-end buffer) 'face
@@ -178,7 +177,7 @@ Return a list of (START END) points."
                            (if (eq value 'highlight-current-symbol-face)
                              nil value)))
                        :modification nil)
-                      (setf (variable-value 'current-highlighted-symbol-string :buffer buffer) nil)))
+                      (setf (buffer-value buffer 'current-highlighted-symbol-string) nil)))
 
 (defun highlight-current-symbol-on-window (window)
   (let ((buffer (window-buffer window)))
