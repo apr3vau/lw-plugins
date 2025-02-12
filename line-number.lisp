@@ -146,9 +146,9 @@ toggle the mode when `p' is nil."
      "" ""
   (let ((on-p (if p (plusp p) (not *global-display-line-numbers-mode*))))
     (cond (on-p
-	   (add-global-hook buffer-major-mode-after-hook 'enable-display-line-numbers-mode))
-	  (t
-	   (remove-global-hook buffer-major-mode-after-hook 'enable-display-line-numbers-mode)
+           (add-global-hook lisp-mode-hook 'enable-display-line-numbers-mode))
+          (t
+           (remove-global-hook lisp-mode-hook 'enable-display-line-numbers-mode)
            (dolist (buffer *buffer-list*)
              (when (buffer-minor-mode buffer "Display Line Numbers")
                (setf (buffer-minor-mode buffer "Display Line Numbers") nil)))))
