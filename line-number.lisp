@@ -3,11 +3,14 @@
 
 ;; Display Line Numbers Mode for LW Editor.
 
+;; FIXME: Virtual strings will be count into tab-space while
+;;        displaying, so line with tab will be corrupt when there's
+;;        leading line number
+
 (in-package editor)
 
 (make-face 'line-number-face
            :foreground (color:make-rgb 0.6 0.6 0.6)
-           ;:background (color:make-rgb 0.2 0.2 0.2)
            :if-exists :overwrite)
 
 (make-face 'highlighted-line-number-face

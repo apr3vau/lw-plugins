@@ -927,12 +927,11 @@ If there's no Side Tree in current editor, open a new one."
               :default (if (valid-entry-p point)
                          (pathname-location (get-text-property point :truename))
                          (editor::buffer-default-directory (current-buffer)))))
-	 (buffer (if (wild-pathname-p pn)
-                   (editor::new-buffer-for-directory pn
-                                                     (if (or (pathname-name pn)
-                                                             (pathname-type pn))
-                                                       nil
-                                                       *ignorable-file-suffices*))
+         (buffer (if (wild-pathname-p pn)
+                   (editor::new-buffer-for-directory
+                    pn
+                    (if (or (pathname-name pn) (pathname-type pn)) nil
+                      *ignorable-file-suffices*))
                    (editor::find-file-buffer-verbose pn))))
     (when buffer
       (editor::record-active-buffer-pathname buffer :open)
