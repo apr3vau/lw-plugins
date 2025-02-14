@@ -5,20 +5,20 @@ Here's the LispWorks Plugins created by April & May. All plugins are zero-depend
 Here we provide:
 
 - IDE Utilities
-  - [NEW] [Display Line Numbers mode](#display-line-numbers-mode)
+  - 🆕 [Display Line Numbers mode](#display-line-numbers-mode)
   - [Doc-string folding](#doc-string-folding)
   - [Enhanced Directory mode (Dired)](#enhanced-directory-mode)
-  - [Enhanced syntax highlight](#enhanced-syntax-highlight)
+  - [Enhanced Lisp syntax highlight](#enhanced-syntax-highlight)
   - [Expand Region](#expand-region)
-  - [NEW] [Highlight current line](#highlight-current-line)
-  - [NEW] [Highlight current symbol & Navigate between symbols](#highlight-current-symbol)
+  - 🆕 [Highlight current line](#highlight-current-line)
+  - 🆕 [Highlight current symbol & Navigate between symbols](#highlight-current-symbol)
   - [In-place Fuzzy completion (like Sly)](#fuzzy-completion)
   - [Markdown syntax highlight](#markdown-syntax-highlight)
   - [Nerd Icons for Directory mode and Side Tree](#nerd-icons)
   - [Pair-Editing (electric-pair-mode)](#pair-editing)
   - [Side Tree (Treemacs)](#side-tree)
-  - [NEW] [Visual Line Mode](#visual-line-mode)
-  - [NEW] [Yank from kill-ring](#yank-from-kill-ring)
+  - 🆕 [Visual Line Mode](#visual-line-mode)
+  - 🆕 [Yank from kill-ring](#yank-from-kill-ring)
 - Others
   - [Pure Lisp SVG renderer](./svg/)
   - [Unix PTY terminal & Ansi Escape Sequence support with Editor](#terminal-utilities)
@@ -60,6 +60,8 @@ Customs:
 
 Implementation: Putting overlays on every #\Newlines in buffer. Numbers shown as `before-string` of the overlay.
 
+---
+
 ### Doc-string Folding
 
 [Source](./docstring-folding.lisp)
@@ -73,6 +75,8 @@ Commands:
 - Fold Buffer Docstrings & Unfold Buffer Docstrings
 
 Implementation: Putting overlays on exceeded docstrings with `EDITOR::INVISIBLE` `T`. Similar with the built-in Definition Folding facility.
+
+---
 
 ### Enhanced Directory mode
 
@@ -92,6 +96,8 @@ Various enhancement to the built-in Directory Mode:
 - Bugfix
 
 > To always keep only 1 Directory Mode buffer, put `(setf editor:*directory-mode-kill-when-opening-new-dired-buffer* t)` to your configuration.
+
+---
 
 ### Enhanced syntax highlight
 
@@ -115,10 +121,12 @@ Faces under the COLOURFUL package:
 - variable-face
 
 > Personally, I suggest using elaborate syntax highlight for Lisp language. That's because Lisp's S-exp is not symbolic enough to indicate its logical meaning, because all S-exps look same.
-
+>
 > For example, in C, function calls have operators at the head, conditional expressions have operators in the middle, and multiple sentences have braces enclosed. But in Lisp, they all look like a list of words inside a bracket.
-
+>
 > This makes syntax highlighting crucial - We have to highlight operators, keywords and brackets in different colors, or we can only see a bunch of white on our screen.
+
+---
 
 ### Expand Region
 
@@ -128,6 +136,8 @@ Faces under the COLOURFUL package:
 
 Similar with [expand-region.el](https://github.com/magnars/expand-region.el)
 
+---
+
 ### Highlight current line
 
 [Source](./highlight.lisp)
@@ -136,7 +146,9 @@ Similar with [expand-region.el](https://github.com/magnars/expand-region.el)
 
 Face: `editor::highlight-current-line-face`
 
-Implementation: Put a face property between two #\Newline s.
+Implementation: Put a face property between two `#\Newline` s.
+
+---
 
 ### Highlight current symbol
 
@@ -153,6 +165,8 @@ Commands:
 
 Face: `editor::highlight-current-symbol-face`
 
+---
+
 ### Fuzzy completion
 
 [Source](./flex-complete.lisp)
@@ -162,6 +176,8 @@ Face: `editor::highlight-current-symbol-face`
 Sly-style fuzzy-matching in-place code completion for LispWorks Editor.
 
 Additionally, we support using `M-p` and `M-n` to select over completions, alternative to default Up / Down arrow key, since arrow keys are too far to reach for keyboards. This is implemented using `editor::pass-gesture-to-non-focus-completer`.
+
+---
 
 ### Markdown syntax highlight
 
@@ -183,6 +199,8 @@ Implemented by hand-written parser and customized Font Lock Mode.
 
 ![Markdown](./images/markdown.png)
 
+---
+
 ### Nerd Icons
 
 [Source](./nerd-icons/)
@@ -203,6 +221,8 @@ For example, to load all features:
 
 The [nerd-icons.lisp](nerd-icons/nerd-icons.lisp) provides a most exausted icon selector for files and directories, created in myself. Use `nerd-icons:file-to-icon-char` to get the corresponding character of a file or directory, or use `nerd-icons:file-to-icon-name` to get a symbol naming with the name of the icon. The corresponding character and character code are storage inside its symbol-plist with `:code` and `:char` properties.
 
+---
+
 ### Pair-Editing
 
 [Source](./pair.lisp)
@@ -212,6 +232,8 @@ The [nerd-icons.lisp](nerd-icons/nerd-icons.lisp) provides a most exausted icon 
 Like `electric-pair-mode` in Emacs. Auto-insert or delete right pair of paired characters when inserting / deleting the left one.
 
 Defining `editor::*pairs*` variables before loading the system to customize which pairs of characters should be auto-inserted and deleted. Default pairs are `()`, `[]`, `{}`, `""` and `||`.
+
+---
 
 ### Side Tree
 
@@ -227,6 +249,8 @@ Additionally, Side Tree support most key-bindings of Dired. Press `C`, `R`, `L`,
 
 Press #\Tab on a Lisp file will show a list of functions, variables, methods defined in the file. Press #\Enter will navigate to its definition.
 
+---
+
 ### Visual Line Mode
 
 [Source](./side-tree.lisp)
@@ -239,6 +263,8 @@ Similar with `visual-line-mode` in Emacs. With the mode turned on, the default c
 
 It may be useful for those who want to ship applications that using Serif font in Editor.
 
+---
+
 ### Yank from kill-ring
 
 [Source](./yank-from-kill-ring.lisp)
@@ -246,6 +272,8 @@ It may be useful for those who want to ship applications that using Serif font i
 > Load the `lw-plugins` system, Press `M-y` to trigger the pop-up.
 
 Since Emacs 28, Press `M-y` without `C-y` before will pop-up a buffer with the kill-ring contents, allow users to select previous killed text. This plugin implements this function in LW Editor.
+
+---
 
 ### Terminal Utilities
 
