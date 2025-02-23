@@ -3753,7 +3753,8 @@
           (when (or (probe-file (merge-pathnames ".git/" path))
                     (probe-file (merge-pathnames "package.json" path))
                     (probe-file (merge-pathnames "defsys.lisp" path))
-                    (directory (merge-pathnames (make-pathname :name :wild :type "asd") path)))
+                    (ignore-errors
+                      (directory (merge-pathnames (make-pathname :name :wild :type "asd") path))))
             (return (values 'cod-repo 'blue)))
           (values (directory-name-to-icon-name (car (last (pathname-directory path)))) 'blue))
         (progn
