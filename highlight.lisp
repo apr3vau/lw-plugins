@@ -12,7 +12,7 @@
 ;; Highlight current line
 
 (make-face 'highlight-current-line-face
-           :background (color:make-rgb 0.2 0.2 0.2)
+           :background (create-dark-background-switchable-color (color:make-rgb 0.8 0.8 1.0) (color:make-rgb 0.2 0.2 0.2))
            :if-exists :overwrite)
 
 (define-editor-variable highlight-current-line-region nil
@@ -100,7 +100,7 @@ toggle the mode when `p' is nil."
 ;; Highlight current symbol
 
 (make-face 'highlight-current-symbol-face
-           :background (color:make-rgb 0.3 0.3 0.3)
+           :background (create-dark-background-switchable-color (color:make-rgb 0.8 0.8 0.8) (color:make-rgb 0.3 0.3 0.3))
            :underline-p t
            :if-exists :overwrite)
 

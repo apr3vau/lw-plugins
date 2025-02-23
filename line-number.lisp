@@ -10,13 +10,13 @@
 (in-package editor)
 
 (make-face 'line-number-face
-           :foreground (color:make-rgb 0.6 0.6 0.6)
+           :foreground (create-dark-background-switchable-color :gray40 :gray60)
            :if-exists :overwrite)
 
 (make-face 'highlighted-line-number-face
-           :foreground (color:make-rgb 1 1 1)
+           :foreground (create-dark-background-switchable-color :black :white)
            :bold-p t
-           :background (color:make-rgb 0.2 0.2 0.2)
+           :background (create-dark-background-switchable-color :gray80 :gray20)
            :if-exists :overwrite)
 
 (define-editor-variable display-line-number-digits nil
