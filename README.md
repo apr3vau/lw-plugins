@@ -273,6 +273,8 @@ Press #\Tab on a Lisp file will show a list of functions, variables, methods def
 
 [Source](./vertical-prompt.lisp)
 
+![vprompt](vprompt.png)
+
 > Load the `lw-plugins` system, it will automatically enable for your M-x, Find File, buffer selection, etc.
 
 > Nerd-Icon integration included. See [Nerd Icons integrations](#nerd-icons).
