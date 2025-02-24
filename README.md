@@ -14,9 +14,10 @@ Here we provide:
   - 🆕 [Highlight current symbol & Navigate between symbols](#highlight-current-symbol)
   - [In-place Fuzzy completion (like Sly)](#fuzzy-completion)
   - [Markdown syntax highlight](#markdown-syntax-highlight)
-  - [Nerd Icons for Directory mode and Side Tree](#nerd-icons)
+  - [Nerd Icons integrations](#nerd-icons)
   - [Pair-Editing (electric-pair-mode)](#pair-editing)
   - [Side Tree (Treemacs)](#side-tree)
+  - 🆕 [Vertical Prompt (Helm/Ivy/Vertico)](#vertical-prompt)
   - 🆕 [Visual Line Mode](#visual-line-mode)
   - 🆕 [Yank from kill-ring](#yank-from-kill-ring)
 - Others
@@ -45,6 +46,8 @@ Or you can clone this repo to `~/common-lisp/` and
 [Source](./line-number.lisp)
 
 > Load the `lw-plugins` system, it will automatically turned-on.
+
+> Have some efficiency issue for large buffer (> 3000 lines) currently.
 
 Display line-numbers at the left side of Editor. Number at current line will be highlighted followed the move of cursor.
 
@@ -209,7 +212,13 @@ To use Nerd Icons, you should install [NerdFonts]("https://github.com/ryanoasis/
 
 > Note: If you choose to install other Nerd Fonts variant (not the Symbols Nerd Font), you should customize the `*nerd-font-family*` variable.
 
-The Directory Mode integration is at [nerd-icons-directory.lisp](./nerd-icons/nerd-icons-directory.lisp), and the Side Tree integration is at [nerd-icons-side-tree.lisp](./nerd-icons/nerd-icons-side-tree.lisp).  They're all relying to [nerd-icons.lisp](./nerd-icons/nerd-icons.lisp). You can use the ASDF systems `lw-plugins/nerd-icons-directory` and `lw-plugins/nerd-icons-side-tree` to load them selectively.
+Integrations:
+
+- For Directory Mode: [nerd-icons-directory.lisp](./nerd-icons/nerd-icons-directory.lisp)
+- For Side Tree: [nerd-icons-side-tree.lisp](./nerd-icons/nerd-icons-side-tree.lisp)
+- For Vertical Prompt: [nerd-icons-vertical-prompt.lisp](./nerd-icons/nerd-icons-vertical-prompt.lisp)
+
+They're all relying to [nerd-icons.lisp](./nerd-icons/nerd-icons.lisp). You can use the ASDF systems to load them.
 
 For example, to load all features:
 
@@ -217,6 +226,7 @@ For example, to load all features:
 (require "asdf")
 (asdf:load-system :lw-plugins/nerd-icons-directory)
 (asdf:load-system :lw-plugins/nerd-icons-side-tree)
+(asdf:load-system :lw-plugins/nerd-icons-vertical-prompt)
 ```
 
 The [nerd-icons.lisp](nerd-icons/nerd-icons.lisp) provides a most exausted icon selector for files and directories, created in myself. Use `nerd-icons:file-to-icon-char` to get the corresponding character of a file or directory, or use `nerd-icons:file-to-icon-name` to get a symbol naming with the name of the icon. The corresponding character and character code are storage inside its symbol-plist with `:code` and `:char` properties.
@@ -248,6 +258,42 @@ Key-bindings are same with Treemacs. See the end of the source code for details.
 Additionally, Side Tree support most key-bindings of Dired. Press `C`, `R`, `L`, `E`, etc. will invoke corresponding action
 
 Press #\Tab on a Lisp file will show a list of functions, variables, methods defined in the file. Press #\Enter will navigate to its definition.
+
+---
+
+### Vertical Prompt
+
+[Source](./vertical-prompt.lisp)
+
+> Load the `lw-plugins` system, it will automatically enable for your M-x, Find File, buffer selection, etc.
+
+> Nerd-Icon integration included. See [Nerd Icons integrations](#nerd-icons).
+
+Vertical prompting completion for LW Editor, with fuzzy-matching and marginalia.
+
+Like Helm / Ivy / Vertico in Emacs.
+
+Bindings:
+
+- C-p / C-n: Switch to previous or next candidate
+- Tab: Complete selected candidate to input area
+
+Variables:
+
+- vprompt:\*vertical-prompt-mode\*: If non-NIL, use vertical prompt for original LW Editor command (default is T)
+- vprompt:\*vertical-prompt-default-display-count\*: Number of candidates shown in the echo-area. (default 15)
+- vprompt:\*vertical-prompt-default-scroll-margin\*: Scroll the candidates if possible when there are less than \<this-number\> candidates after the list. (default 2)
+- vprompt:\*vertical-prompt-default-marginalia-gap\*: Minimal gap between display-string and marginalia. (default 2)
+
+Faces:
+
+- vprompt:selected-face: Additional face for selected candidate
+- vprompt:marginalia-face: Face for marginalia
+- vprompt:command-binding-face: Face for possible key-binding when prompting for commands
+
+See the source code of `vprompt:vertical-parse` to further customization or define your own echo-area extensions.
+
+Implementation: Define a new echo-parsing function based on editor::parse-for-something, using buffer-local after-change hook to detect change and redisplay candidates. Since LW has hard-coded the region from editor::parse-starting-point to the end of the buffer as the input area, candidates can only be put at the beginning of the echo area buffer.
 
 ---
 

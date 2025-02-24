@@ -15,6 +15,7 @@
                (:file "line-number")
                (:file "pair")
                (:file "side-tree")
+               (:file "vertical-prompt")
                (:file "visual-line")
                (:file "yank-from-kill-ring")))
 
@@ -34,3 +35,9 @@
   :license "0BSD"
   :depends-on (lw-plugins/nerd-icons)
   :components ((:file "nerd-icons/nerd-icons-side-tree")))
+
+(defsystem lw-plugins/nerd-icons-vertical-prompt
+  :author "April & May"
+  :license "0BSD"
+  :depends-on (lw-plugins/nerd-icons)
+  :components ((:file "nerd-icons/nerd-icons-vertical-prompt")))
