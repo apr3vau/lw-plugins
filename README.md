@@ -37,6 +37,8 @@ Or you can clone this repo to `~/common-lisp/` and
 (asdf:load-system :lw-plugins)
 ```
 
+See [Nerd Icons integrations](#nerd-icons) to install extra nerd-icon plugins (extra steps needed).
+
 ![Preview](./images/preview.png)
 
 ## Introductions
