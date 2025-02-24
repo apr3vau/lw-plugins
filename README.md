@@ -47,8 +47,6 @@ Or you can clone this repo to `~/common-lisp/` and
 
 > Load the `lw-plugins` system, it will automatically turned-on.
 
-> Have some efficiency issue for large buffer (> 3000 lines) currently.
-
 Display line-numbers at the left side of Editor. Number at current line will be highlighted followed the move of cursor.
 
 Commands:
@@ -61,7 +59,13 @@ Customs:
 - editor::line-number-face: The face of the number itself.
 - editor::highlighted-line-number-face: The face of number when highlighted.
 
-Implementation: Putting overlays on every #\Newlines in buffer. Numbers shown as `before-string` of the overlay.
+> Known Bugs:
+> - Line with prefixing #\Tab will cause cursor being drawn at wrong place (LispWorks bug)
+> - Efficiency issue for large buffer (> 3000 lines) currently.
+> - (Rarely) Multiple line numbers displayed at the same position
+
+> Implementation: 
+> Putting overlays on every #\Newlines in buffer. Numbers shown as `after-string` of the overlay.
 
 ---
 
@@ -77,7 +81,8 @@ Commands:
 
 - Fold Buffer Docstrings & Unfold Buffer Docstrings
 
-Implementation: Putting overlays on exceeded docstrings with `EDITOR::INVISIBLE` `T`. Similar with the built-in Definition Folding facility.
+> Implementation:
+> Putting overlays on exceeded docstrings with `EDITOR::INVISIBLE` `T`. Similar with the built-in Definition Folding facility.
 
 ---
 
@@ -128,6 +133,9 @@ Faces under the COLOURFUL package:
 > For example, in C, function calls have operators at the head, conditional expressions have operators in the middle, and multiple sentences have braces enclosed. But in Lisp, they all look like a list of words inside a bracket.
 >
 > This makes syntax highlighting crucial - We have to highlight operators, keywords and brackets in different colors, or we can only see a bunch of white on our screen.
+
+> Known Bugs
+> - Declarations across multiple lines colored as normal form
 
 ---
 
@@ -294,7 +302,11 @@ Faces:
 
 See the source code of `vprompt:vertical-parse` to further customization or define your own echo-area extensions.
 
-Implementation: Define a new echo-parsing function based on editor::parse-for-something, using buffer-local after-change hook to detect change and redisplay candidates. Since LW has hard-coded the region from editor::parse-starting-point to the end of the buffer as the input area, candidates can only be put at the beginning of the echo area buffer.
+> Known Bugs:
+> - Press C-u + commands inside vertical-prompting will cause the candidate buffer scroll back to the top
+
+> Implementation: 
+> Define a new echo-parsing function based on editor::parse-for-something, using buffer-local after-change hook to detect change and redisplay candidates. Since LW has hard-coded the region from editor::parse-starting-point to the end of the buffer as the input area, candidates can only be put at the beginning of the echo area buffer.
 
 ---
 
