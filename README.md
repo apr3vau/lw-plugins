@@ -287,6 +287,7 @@ Variables:
 
 Faces:
 
+- vprompt:prompt-face: Face for echo area prompt
 - vprompt:selected-face: Additional face for selected candidate
 - vprompt:marginalia-face: Face for marginalia
 - vprompt:command-binding-face: Face for possible key-binding when prompting for commands
