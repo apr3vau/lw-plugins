@@ -264,6 +264,7 @@ TARGET in the SOURCE. Otherwise return NIL."
                                                              (elt matched-candidates i)))))
                                     3
                                     marginalia-gap)))
+          ;; Delete old content
           (with-point ((point (buffers-start buffer)))
             (when (next-single-property-change point 'vertical-displayer)
               (delete-between-points (buffers-start buffer) point)))
@@ -271,15 +272,13 @@ TARGET in the SOURCE. Otherwise return NIL."
             (do ((i min-index (1+ i)))
                 ((= i max-index))
               (let ((cand (elt matched-candidates i)))
-                (with-point ((start point :before-insert)
-                             (end point))
-                  (insert-character end #\Space)
-                  (insert-character
-                   end
-                   (if (eql i index) (code-char 9654) #\Space))
-                  (insert-character end #\Space)
-                  (editor::insert-buffer-string end (candidate-display-string cand))
-                  (editor::insert-spaces end (- marginalia-start (point-column end)))
+                (with-point ((start point :before-insert))
+                  ;; Indicator
+                  (insert-things point
+                                 #\Space (if (eql i index) (code-char 9654) #\Space) #\Space)
+                  ;; Display string
+                  (editor::insert-buffer-string point (candidate-display-string cand))
+                  ;; Marginalia
                   (when-let (ma (candidate-marginalia cand))
                     (setq ma (first (split-sequence
                                      '(#\Newline)
@@ -288,13 +287,15 @@ TARGET in the SOURCE. Otherwise return NIL."
                                                            (editor::current-echo-area-window))
                                                           marginalia-start
                                                           1))))))
+                    (editor::insert-spaces point (- marginalia-start (point-column point)))
                     (editor::insert-buffer-string
-                     end
+                     point
                      (editor::make-buffer-string :%string ma
                                                  :properties `((0 ,(length ma) (editor:face marginalia-face))))))
-                  (insert-character end #\Newline)
+                  (insert-character point #\Newline)
                   (when (eql i index)
-                    (editor::push-region-face 'selected-face start end nil)))))
+                    (editor::push-region-face 'selected-face start point nil)))))
+            ;; Top margin
             (when (< (- max-index min-index) display-count)
               (let ((end (copy-point (buffers-start buffer)))
                     (count (- display-count (- max-index min-index))))
@@ -302,6 +303,15 @@ TARGET in the SOURCE. Otherwise return NIL."
                  end
                  (editor::make-buffer-string :%string (make-string count :initial-element #\Newline)
                                              :properties `((0 ,count (editor:face editor::default)))))))
+            ;; Candidate count
+            (let ((count-str (format nil "(~A/~A) "
+                                     (if index (1+ index) "*")
+                                     (length matched-candidates))))
+              (editor::insert-buffer-string
+               point
+               (editor::make-buffer-string :%string count-str
+                                           :properties `((0 ,(length count-str) (editor:face prompt-face))))))
+            ;; Selection overlay
             (if index
               (when-let (ov (buffer-value buffer 'select-input-overlay))
                 (delete-overlay ov)
