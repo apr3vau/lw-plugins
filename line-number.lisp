@@ -43,7 +43,7 @@
                     while (find-next-character point #\Newline)
                     do (with-point ((start point))
                          (point-after point)
-                         (let ((overlays (loop for ov in (overlays-in start point)
+                         (let ((overlays (loop for ov in (overlays-at start)
                                                when (overlay-get ov 'display-line-number)
                                                  if (point= (overlay-start ov) (overlay-end ov))
                                                    do (delete-overlay ov)
