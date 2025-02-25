@@ -24,55 +24,69 @@
 
 (defun display-line-number-after-change-function (buffer offset old new)
   (with-buffer-locked (buffer :for-modification nil)
-    (with-point ((start (buffer-point buffer))
-                 (end (buffer-point buffer)))
-      (move-point-to-offset start offset)
-      (move-point-to-offset end (max old new))
-      (when (or (= offset 0)
-                (null (find-next-character start))
-                (point>= start end))
-        (let* ((digits (1+ (floor (log (max 1 (buffer-newlines-count buffer)) 10))))
-               (format-str (format nil " ~~~DD " digits))
-               force-update)
-          (when (not (eql digits (buffer-value buffer 'display-line-number-digits)))
-            (setf (buffer-value buffer 'display-line-number-digits) digits
-                  force-update t))
-          (let (valid-overlays)
-            (with-point ((point (buffers-start buffer)))
-              (loop for line from 2
-                    while (find-next-character point #\Newline)
-                    do (with-point ((start point))
-                         (point-after point)
-                         (let ((overlays (loop for ov in (overlays-at start)
-                                               when (overlay-get ov 'display-line-number)
-                                                 if (point= (overlay-start ov) (overlay-end ov))
-                                                   do (delete-overlay ov)
-                                                 else collect ov)))
-                           (if overlays
-                             (progn
-                               (when (> (length overlays) 1)
-                                 (dolist (ov (cdr overlays))
-                                   (delete-overlay ov)))
-                               (let* ((ov (first overlays)))
-                                 (when (or force-update
-                                           (/= (overlay-get ov 'display-line-number) line))
-                                   (overlay-put ov 'display-line-number line)
-                                   (overlay-put ov 'after-string (cons (format nil format-str line) 'line-number-face)))
-                                 (push ov valid-overlays)))
-                             (let ((ov (make-overlay start point
-                                                     :start-kind :after-insert
-                                                     :end-kind :before-insert)))
-                               (overlay-put ov 'display-line-number line)
-                               (overlay-put ov 'after-string (cons (format nil format-str line) 'line-number-face))
-                               (overlay-put ov 'priority -1)
-                               (push ov valid-overlays)))))))
-            (dolist (ov (buffer-overlays buffer))
-              (when-let (num (overlay-get ov 'display-line-number))
-                (unless (or (and (not force-update)
-                                 (eql num 1)
-                                 (point= (overlay-start ov) (buffers-start buffer)))
-                            (memq ov valid-overlays))
-                  (delete-overlay ov))))
+    (when (or (eql offset 0)
+              (and offset old new
+                   (with-point ((start (buffer-point buffer))
+                                (end (buffer-point buffer)))
+                     (move-point-to-offset start offset)
+                     (move-point-to-offset end (max old new))
+                     (find #\Newline (points-to-string start end)))))
+      (let* ((digits (1+ (floor (log (max 1 (buffer-newlines-count buffer)) 10))))
+             (format-str (format nil " ~~~DD " digits))
+             update-start update-end force-update)
+        ;; Partial update constrainted to displayed region to reduce computations
+        (let ((min-pt (buffers-end buffer))
+              (max-pt (buffers-start buffer)))
+          (loop for window in (buffer-windows buffer)
+                for start = (window-display-start window)
+                for end = (slot-value window 'display-end)
+                when (point< start min-pt)
+                  do (setq min-pt start)
+                when (point> end max-pt)
+                  do (setq max-pt end))
+          (setq update-start min-pt
+                update-end max-pt))
+        (when (not (eql digits (buffer-value buffer 'display-line-number-digits)))
+          (setf (buffer-value buffer 'display-line-number-digits) digits
+                force-update t))
+        ;; Use two iterations (overlays, newlines) to remove old, add
+        ;; new, and update existed overlays.
+        (let (valid-overlays)
+          (dolist (ov (buffer-overlays buffer))
+            (when (overlay-get ov 'display-line-number)
+              (let ((start (overlay-start ov))
+                    (end (overlay-end ov)))
+                (when (and (point> end update-start)
+                           (point< start update-end))
+                  (if (and (not force-update)
+                           (or (eql (character-at start 0) #\Newline)
+                               (= (point-position start) 0))
+                           (= (- (point-position end) (point-position start)) 1)
+                           (null (find start valid-overlays :key #'overlay-start :test #'point=)))
+                    (push ov valid-overlays)
+                    (delete-overlay ov))))))
+          (with-point ((point update-start))
+            (loop for line from (+ (count-lines (buffers-start buffer) update-start) 2)
+                    to (+ (count-lines (buffers-start buffer) update-end) 2)
+                  while (find-next-character point #\Newline)
+                  for ov = (find-if (lambda (ov) (point= point (overlay-start ov)))
+                                    valid-overlays)
+                  if ov
+                    when (/= (overlay-get ov 'display-line-number) line)
+                      do (overlay-put ov 'display-line-number line)
+                         (overlay-put ov 'after-string (cons (format nil format-str line) 'line-number-face))
+                      end
+                  else do (with-point ((end point))
+                            (point-after end)
+                            (let ((ov (make-overlay point end
+                                                    :start-kind :after-insert
+                                                    :end-kind :before-insert)))
+                              (overlay-put ov 'display-line-number line)
+                              (overlay-put ov 'after-string (cons (format nil format-str line) 'line-number-face))
+                              (overlay-put ov 'priority -1)))
+                  do (point-after point)))
+          ;; The Line No.1 needs special care
+          (when (point= update-start (buffers-start buffer))
             (let ((first (loop for ov in (overlays-at (buffers-start buffer))
                                when (overlay-get ov 'display-line-number)
                                  if (point= (overlay-start ov) (overlay-end ov))
@@ -91,9 +105,13 @@
 
 (define-editor-variable highlighted-current-line-overlay nil)
 
-(defun highlight-current-line-number-for-window (window)
+(defun display-line-number-after-redisplay-function (window)
   (let ((buffer (window-buffer window)))
     (when (buffer-minor-mode buffer "Display Line Numbers")
+      ;; Although seems a bit expensive but... It's the only way to keep overlays update
+      (display-line-number-after-change-function buffer nil nil nil)
+
+      ;; Highlight current line number
       (let* ((format-str (format nil " ~~~DD " (buffer-value buffer 'display-line-number-digits)))
              (old (buffer-value buffer 'highlighted-current-line-overlay))
              (old-num (when old (overlay-get old 'display-line-number))))
@@ -180,5 +198,5 @@ toggle the mode when `p' is nil."
     (message "Global Display Line Numbers mode %s." (if on-p "enabled" "disabled"))
     (setq *global-display-line-numbers-mode* on-p)))
 
-(add-global-hook after-redisplay-hook 'highlight-current-line-number-for-window)
+(add-global-hook after-redisplay-hook 'display-line-number-after-redisplay-function)
 (global-display-line-numbers-mode-command 1)

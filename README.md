@@ -66,7 +66,6 @@ Customs:
 
 > Known Bugs:
 > - Line with prefixing #\Tab will cause cursor being drawn at wrong place (LispWorks bug)
-> - Efficiency issue for large buffer (> 3000 lines) currently.
 > - (Rarely) Multiple line numbers displayed at the same position
 
 > Implementation: 
