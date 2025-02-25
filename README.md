@@ -21,10 +21,11 @@ Here we provide:
   - [Side Tree (Treemacs)](#side-tree)
   - 🆕 [Vertical Prompt (Helm/Ivy/Vertico)](#vertical-prompt)
   - 🆕 [Visual Line Mode](#visual-line-mode)
-  - 🆕 [Yank from kill-ring](#yank-from-kill-ring)
 - Others
   - [Pure Lisp SVG renderer](./svg/)
   - [Unix PTY terminal & Ansi Escape Sequence support with Editor](#terminal-utilities)
+
+> 25/02/2025: Yank from kill-ring is now included inside Vertical Prompt.
 
 The plugins are available via [Ultralisp](https://ultralisp.org)
 
@@ -296,7 +297,6 @@ Variables:
 
 - vprompt:\*vertical-prompt-mode\*: If non-NIL, use vertical prompt for original LW Editor command (default is T)
 - vprompt:\*vertical-prompt-default-display-count\*: Number of candidates shown in the echo-area. (default 15)
-- vprompt:\*vertical-prompt-default-scroll-margin\*: Scroll the candidates if possible when there are less than \<this-number\> candidates after the list. (default 2)
 - vprompt:\*vertical-prompt-default-marginalia-gap\*: Minimal gap between display-string and marginalia. (default 2)
 
 Faces:
@@ -327,16 +327,6 @@ Useful for working in Editor with Serif fonts, or has long truncated lines.
 Similar with `visual-line-mode` in Emacs. With the mode turned on, the default cursor moving functions will be replaced to Visual version, which will move the cursor by its pixel position instead of logical place.
 
 It may be useful for those who want to ship applications that using Serif font in Editor.
-
----
-
-### Yank from kill-ring
-
-[Source](./yank-from-kill-ring.lisp)
-
-> Load the `lw-plugins` system, Press `M-y` to trigger the pop-up.
-
-Since Emacs 28, Press `M-y` without `C-y` before will pop-up a buffer with the kill-ring contents, allow users to select previous killed text. This plugin implements this function in LW Editor.
 
 ---
 

@@ -16,8 +16,7 @@
                (:file "pair")
                (:file "side-tree")
                (:file "vertical-prompt")
-               (:file "visual-line")
-               (:file "yank-from-kill-ring")))
+               (:file "visual-line")))
 
 (defsystem lw-plugins/nerd-icons
   :author "April & May"

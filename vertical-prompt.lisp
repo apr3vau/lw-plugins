@@ -17,7 +17,6 @@
   (:export
    *vertical-prompt-mode*
    *vertical-prompt-default-display-count*
-   *vertical-prompt-default-scroll-margin*
    *vertical-prompt-default-marginalia-gap*
 
    selected-face
@@ -55,9 +54,6 @@
   "Number of candidates shown in the echo-area.
 
 Should not be more than 29, or some display problem may happen.")
-
-(defvar *vertical-prompt-default-scroll-margin* 2
-  "Scroll the candidates if possible when there are less than <this-number> candidates after the list.")
 
 (defvar *vertical-prompt-default-marginalia-gap* 2
   "Minimal gap between display-string and marginalia.")
@@ -102,7 +98,6 @@ Should not be more than 29, or some display problem may happen.")
   ;; Must be provided
   candidate-func      ; function being called with echo-area's input, yield a sequence of candidate
   (display-count 10)
-  (scroll-margin 2)
   (marginalia-gap 2)
   ;; Computed
   selected            ; Candidate being selected
@@ -119,8 +114,9 @@ Should not be more than 29, or some display problem may happen.")
   (lambda (input)
     (if (plusp (length input))
       (let (result)
-        (dolist (cand candidates)
-          (let ((string (editor::buffer-string-string (candidate-string cand))))
+        (dotimes (i (length candidates))
+          (let* ((cand (elt candidates i))
+                 (string (editor::buffer-string-string (candidate-string cand))))
             (when-let (starts (fuzzy-search input string))
               (push (list cand starts string) result))))
         (stable-sort result
@@ -247,16 +243,42 @@ TARGET in the SOURCE. Otherwise return NIL."
         if (null start) do (return)
         else collect start))
 
+(defun buffer-string-subseq (buffer-string start &optional end)
+  (let* ((str (editor::buffer-string-string buffer-string))
+         (props (editor::buffer-string-properties buffer-string))
+         (cut-end-p (and end (/= end (length str)))))
+    (unless (zerop start)
+      (setq str (subseq str start)
+            props
+            (loop for (ps pe prop) in props
+                  for new-start = (- ps start)
+                  for new-end = (- pe start)
+                  when (plusp new-end)
+                    collect (list (min 0 new-start) new-end prop))))
+    (when cut-end-p
+      (setq str (subseq str 0 end))
+      (loop for i from 0
+            for prop in props
+            when (> (second prop) end)
+              if (> (first prop) end)
+                do (setq props (when (plusp i)
+                                 (subseq props 0 (1- i))))
+                   (return)
+              else do (setf (second (nth i props)) end)
+                      (setq props (subseq props 0 i))))
+    (editor::make-buffer-string :%string str :properties props)))
+
 (defun vertical-parse-update (buffer)
   "(Re)Display updated echo area content when change have made."
   (let ((inf (buffer-value buffer 'vertical-parse-inf)))
-    (with-slots (selected matched-candidates display-count scroll-margin marginalia-gap) inf
+    (with-slots (selected matched-candidates display-count marginalia-gap) inf
       (with-buffer-locked (buffer)
         (set-buffer-after-change-hook buffer 'vertical-parse-after-change nil)
         (let* ((index (position selected matched-candidates))
-               (min-index (max 0 (min (- (or index 0) (- display-count (1+ scroll-margin)))
+               (min-index (max 0 (min (- (or index 0) (- display-count (1+ (floor display-count 2))))
                                       (- (length matched-candidates) display-count))))
                (max-index (min (length matched-candidates) (+ min-index display-count)))
+               (window-width (get-window-width (editor::current-echo-area-window)))
                (marginalia-start (+ (loop for i from (max 0 (- min-index 50))
                                             below (min (+ max-index 50) (length matched-candidates))
                                           maximize (length (editor::buffer-string-string
@@ -277,16 +299,17 @@ TARGET in the SOURCE. Otherwise return NIL."
                   (insert-things point
                                  #\Space (if (eql i index) (code-char 9654) #\Space) #\Space)
                   ;; Display string
-                  (editor::insert-buffer-string point (candidate-display-string cand))
+                  (let ((display-str (candidate-display-string cand)))
+                    (editor::insert-buffer-string
+                     point
+                     (buffer-string-subseq display-str 0 (min (length (editor::buffer-string-string display-str))
+                                                              (- window-width 3)))))
                   ;; Marginalia
                   (when-let (ma (candidate-marginalia cand))
                     (setq ma (first (split-sequence
                                      '(#\Newline)
                                      (subseq ma 0 (min (length ma)
-                                                       (- (get-window-width
-                                                           (editor::current-echo-area-window))
-                                                          marginalia-start
-                                                          1))))))
+                                                       (- window-width marginalia-start 1))))))
                     (editor::insert-spaces point (- marginalia-start (point-column point)))
                     (editor::insert-buffer-string
                      point
@@ -355,7 +378,6 @@ TARGET in the SOURCE. Otherwise return NIL."
 (defun vertical-parse (&rest options
                              &key candidates candidate-func
                              (display-count *vertical-prompt-default-display-count*)
-                             (scroll-margin *vertical-prompt-default-scroll-margin*)
                              (marginalia-gap *vertical-prompt-default-marginalia-gap*)
                              not-editor
                              &allow-other-keys)
@@ -401,7 +423,6 @@ If candidates or string-table provided, generate candidate-func from them."
              (vparse-inf (make-vertical-parse-inf
                           :candidate-func func
                           :display-count display-count
-                          :scroll-margin scroll-margin
                           :marginalia-gap marginalia-gap)))
         (declare (dynamic-extent editor::*editor-state*))
         (setf (buffer-value echo-area-buffer 'vertical-parse-inf) vparse-inf)
@@ -861,10 +882,6 @@ If candidates or string-table provided, generate candidate-func from them."
               do (skip-whitespace point)
                  (move-point end point)
                  (line-end end)
-                 (let ((max-col (+ (point-column point)
-                                   (- (get-window-width (editor::current-echo-area-window)) 5))))
-                   (if (> (point-column end) max-col)
-                     (editor::move-to-column end max-col)))
                  (let ((str (points-to-string point end)))
                    (when (and (> (length str) 2)
                               (eql (char str 0) #\())
@@ -890,4 +907,120 @@ If candidates or string-table provided, generate candidate-func from them."
     (let ((selected (vertical-parse :prompt "Goto Definition: "
                                     :candidates candidates
                                     :verify-func (lambda (str inf) (declare (ignore inf)) str))))
-      (goto-line buffer (parse-integer selected :junk-allowed t)))))
+      (goto-line buffer (parse-integer selected :junk-allowed t))
+      (skip-whitespace (buffer-point buffer)))))
+
+(defadvice (goto-line-command lw-plugins :around) (p)
+  (if *vertical-prompt-mode*
+    (let* ((buffer (current-buffer))
+           (candidates (make-array 10 :fill-pointer 0 :adjustable t))
+           (digits (1+ (floor (log (max 1 (editor::buffer-newlines-count buffer)) 10)))))
+      (with-buffer-locked (buffer :for-modification nil)
+        (with-point ((point (buffers-start buffer))
+                     (end (buffers-start buffer)))
+          (loop for r = t then (line-offset point 1 0)
+                while r
+                do (move-point end point)
+                   (line-end end)
+                   (let ((str (points-to-string point end))
+                         (num-str (princ-to-string (1+ (count-lines (buffers-start buffer) point)))))
+                     (setq num-str (string-append num-str (make-string (1+ (- digits (length num-str)))
+                                                                       :initial-element #\Space)))
+                     (vector-push-extend
+                      (make-candidate
+                       :string (string-append num-str " " str)
+                       :display-string
+                       (editor::concatenate-buffer-strings
+                        (editor::make-buffer-string
+                         :%string num-str
+                         :properties `((0 ,(length num-str) (editor:face editor::default))))
+                        (editor::make-buffer-string
+                         :%string str
+                         :properties (editor::bounded-text-properties-in point end :modification nil))))
+                      candidates)))))
+      (let ((selected (vertical-parse :prompt "Goto Line: "
+                                      :candidates candidates
+                                      :verify-func (lambda (str inf) (declare (ignore inf)) str))))
+        (goto-line buffer (parse-integer selected :junk-allowed t))
+        (skip-whitespace (buffer-point buffer))))
+    (call-next-advice p)))
+
+(bind-key "Goto Line" #("M-g" "g"))
+(bind-key "Goto Line" #("M-g" "M-g"))
+(bind-key "Goto Definition" #("M-g" "d"))
+
+;; Yank from Kill Ring
+
+(make-face 'yank-from-kill-ring-newline-face
+           :foreground :white
+           :background :red
+           :if-exists :overwrite)
+
+(defun merge-properties (properties)
+  (let ((prop-start 0)
+        (prop-end 0)
+        prop
+        result)
+    (dolist (props properties)
+      (destructuring-bind (ps pe p) props
+        (cond ((null prop)
+               (setq prop-start ps
+                     prop-end pe
+                     prop p))
+              ((and (= prop-end ps)
+                    (equalp prop p))
+               (setq prop-end pe))
+              (t (push-end (list prop-start prop-end prop) result)
+                 (setq prop-start ps
+                       prop-end pe
+                       prop p)))))
+    (push-end (list prop-start prop-end prop) result)
+    result))
+
+(defcommand "Yank From Kill Ring" (p)
+     "Select a stretch of previously killed text and insert (\"paste\") it."
+     "This function will not behave in any reasonable fashion when
+  called as a lisp function."
+  (declare (ignore p))
+  (flet ((props-at (index buffer-string)
+           (when (editor::buffer-string-p buffer-string)
+             (let ((props (editor::buffer-string-properties buffer-string)))
+               (loop for (start end prop) in props
+                     do (cond ((<= start index (1- end)) (return prop))
+                              ((< index start) (return))))))))
+    (if-let (candidates
+             (loop for i from 0 below (ring-length editor::*kill-ring*)
+                   for item = (ring-ref editor::*kill-ring* i)
+                   for string = (editor::buffer-string-string item)
+                   for display-string =
+                     (loop with new-str = (make-array 15 :element-type 'character :fill-pointer 0 :adjustable t)
+                           with props = nil
+                           with new-index = 0
+                           for index from 0
+                           for c across string
+                           for prev-whitespace-p = t then whitespace-p
+                           for whitespace-p = (whitespace-char-p c)
+                           do (cond ((member c '(#\Return #\Newline))
+                                     (vector-push-extend #\⏎ new-str)
+                                     (push-end (list new-index (1+ new-index) '(editor:face 'yank-from-kill-ring-newline-face)) props)
+                                     (incf new-index))
+                                    ((and prev-whitespace-p whitespace-p) nil)
+                                    (t (vector-push-extend c new-str)
+                                       (push-end (list new-index (1+ new-index) (or (props-at index item)
+                                                                            '(editor:face editor::default)))
+                                                 props)
+                                       (incf new-index)))
+                           finally (return (editor::make-buffer-string :%string new-str
+                                                                       :properties (merge-properties props))))
+                   collect (make-candidate :string string :display-string display-string)))
+        (insert-string
+         (current-point)
+         (vertical-parse :prompt "Yank from kill-ring: "
+                         :candidates candidates
+                         :verify-func (lambda (str inf) (declare (ignore inf)) str)))
+      (editor-error "Kill ring is empty"))))
+
+(defadvice (rotate-kill-ring-command lw-plugins :around) (p)
+  (if (not (eq (editor::last-command-type) :unkill))
+    (yank-from-kill-ring-command p)
+    (call-next-advice p)))
