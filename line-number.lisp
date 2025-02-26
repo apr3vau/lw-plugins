@@ -24,7 +24,7 @@
 
 (defun display-line-number-after-change-function (buffer offset old new)
   (with-buffer-locked (buffer :for-modification nil)
-    (when (or (eql offset 0)
+    (when (or (member offset '(0 nil))
               (and offset old new
                    (with-point ((start (buffer-point buffer))
                                 (end (buffer-point buffer)))
