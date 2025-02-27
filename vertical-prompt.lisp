@@ -360,15 +360,17 @@ TARGET in the SOURCE. Otherwise return NIL."
           (setf matched-candidates
                 (funcall (vertical-parse-inf-candidate-func inf) input))
           (let ((default (slot-value parse-inf 'editor::default-string)))
-            (if (or (and default
-                         (zerop (length input))
-                         (plusp (length default)))
-                    (equalp input default))
-              (setf selected (find default matched-candidates :key #'candidate-string))
-              (when (or (zerop (length input))
-                        (and matched-candidates
-                             (not (member selected matched-candidates))))
-                (setf selected (elt matched-candidates 0))))))
+            (if matched-candidates
+              (if (or (and default
+                           (zerop (length input))
+                           (plusp (length default)))
+                      (equalp input default))
+                (setf selected (find default matched-candidates :key #'candidate-string))
+                (when (or (zerop (length input))
+                          (and matched-candidates
+                               (not (member selected matched-candidates))))
+                  (setf selected (elt matched-candidates 0))))
+              (setf selected nil))))
         (vertical-parse-update buffer)))))
 
 
