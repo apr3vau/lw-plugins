@@ -7,7 +7,7 @@ All the codes are licensed under [0BSD](https://spdx.org/licenses/0BSD.html), al
 Here we provide:
 
 - IDE Utilities
-  - 🆕 [Display Line Numbers mode](#display-line-numbers-mode)
+  - [Obsolete] [Display Line Numbers mode](#display-line-numbers-mode)
   - [Doc-string folding](#doc-string-folding)
   - [Enhanced Directory mode (Dired)](#enhanced-directory-mode)
   - [Enhanced Lisp syntax highlight](#enhanced-syntax-highlight)
@@ -48,9 +48,11 @@ See [Nerd Icons integrations](#nerd-icons) to install extra nerd-icon plugins (e
 
 ### Display Line Numbers mode
 
+__Since LispWorks 8.1.0 Editor has built-in line number displayer, which is recommended. This plugin will not be loaded on LW 8.1.0+, but it's reserved for old versions and references.__
+
 [Source](./line-number.lisp)
 
-> Load the `lw-plugins` system, it will automatically turned-on.
+> Load the `lw-plugins` system, add `(global-display-line-numbers-mode-command 1)` to init file if you want it always enable.
 
 Display line-numbers at the left side of Editor. Number at current line will be highlighted followed the move of cursor.
 

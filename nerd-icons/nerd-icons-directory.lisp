@@ -12,7 +12,7 @@
   (if (and (boundp '*directory-mode-name-preceding-offset*)
            *directory-mode-name-preceding-offset*)
       (incf *directory-mode-name-preceding-offset* 2)
-    (defparameter *directory-mode-name-preceding-offset* 13)) 
+    (defparameter *directory-mode-name-preceding-offset* (+ (length *directory-mode-prefix*) 7 2)))
   (setf (get '*directory-mode-name-preceding-offset* 'nerd-icons:nerd-icons) t))
 
 ;; We produce lists of (string size icon-sym color) instead of (string . size) here

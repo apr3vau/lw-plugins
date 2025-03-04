@@ -12,7 +12,7 @@
                (:file "expand-region")
                (:file "flex-complete")
                (:file "highlight")
-               (:file "line-number")
+               (:file "line-number" :if-feature (:and :lispworks8 (:not :lispworks8.1)))
                (:file "pair")
                (:file "side-tree")
                (:file "vertical-prompt")

@@ -198,5 +198,5 @@ toggle the mode when `p' is nil."
     (message "Global Display Line Numbers mode %s." (if on-p "enabled" "disabled"))
     (setq *global-display-line-numbers-mode* on-p)))
 
-(add-global-hook after-redisplay-hook 'display-line-number-after-redisplay-function)
-(global-display-line-numbers-mode-command 1)
+;(add-global-hook after-redisplay-hook 'display-line-number-after-redisplay-function)
+;(global-display-line-numbers-mode-command 1)
