@@ -1,6 +1,6 @@
 # LispWorks Plugins by April & May
 
-Here's the LispWorks Plugins created by April & May. Most plugins are zero-dependency (except SVG and Nerd-Icon), tested under LispWorks 8.0.1 Macintosh (primary) & Windows, safe for delivery, and have been used for a long time in my own. Each single Lisp file under the root directory are not dependent with each other, for the ease of separation. 
+Here's the LispWorks Plugins created by April & May. Most plugins are zero-dependency (except SVG and Nerd-Icon), tested under LispWorks __8.1.0__ & 8.0.1 Macintosh (primary) & Windows, safe for delivery, and have been used for a long time in my own. Each single Lisp file under the root directory are not dependent with each other, for the ease of separation. 
 
 All the codes are licensed under [0BSD](https://spdx.org/licenses/0BSD.html), allowing any kind of usage without any limitation. Feel free to include any part of them in your own product.
 
