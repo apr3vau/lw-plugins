@@ -33,7 +33,11 @@
                                         for i in starts2
                                         sum (- i j))))
                           (if (= n1 n2)
-                            (< (length string1) (length string2))
+                            (let ((len1 (length string1))
+                                  (len2 (length string2)))
+                              (if (= len1 len2)
+                                (string< string1 string2)
+                                (< len1 len2)))
                             (< n1 n2))))))
                 :key #'cdr)
           (setq result (mapcar #'first result))))
