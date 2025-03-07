@@ -36,12 +36,11 @@
 
 (in-package editor)
 
-(defvar *max-complete-items* 50
+(defvar *max-complete-items* 100
   "Maximum complete items being showed in in-place complete dialog
 
 Keep this number lower will reduce graphical delay caused by building
-list items. Especially effective under those slower GUI framework like
-Cocoa.")
+list items.")
 
 (defvar *flex-complete-enable-indicator-p* t
   "Whether enable the prefixing indicator of complete symbol.")
@@ -59,13 +58,26 @@ TARGET in the SOURCE. Otherwise return NIL."
         if (null start) do (return)
         else collect start))
 
+;; complete-in-place will call flex-complete-func & refresh candidate
+;; list each time user change the selection (Up or Down). If the items
+;; returned are not same with previous the completion panel will be
+;; reset.
+
+;; This may leads to a lot of recomputing when user navigating through
+;; candidates and bring latency, so we make a cache here.
+(defvar *flex-complete-prev-match* nil)
+
 (defun flex-complete-func (str &optional arg)
   "Complete function for Flex Complete Symbol."
   (when (= (length str) 0) (return-from flex-complete-func))
+  ;; Try to read our cache
+  (when (equal str (car *flex-complete-prev-match*))
+    (return-from flex-complete-func (cdr *flex-complete-prev-match*)))
+  
   (let ((current-package (completion-arg-package arg))
         (split (split-sequence '(#\:) str))
         internal-packages external-packages
-        result)
+        (result (make-array 50 :fill-pointer 0 :adjustable t)))
     ;; Determine packages to search
     (case (length split)
       ;; No colon: current package's internals + other packages' (except KEYWORD) externals
@@ -90,7 +102,7 @@ TARGET in the SOURCE. Otherwise return NIL."
         (do-external-symbols (sym package)
           (let ((string (prin1-to-string sym)))
             (when-let (starts (flex-complete-fuzzy-search str string))
-              (push (list sym starts string) result)))))
+              (vector-push-extend (list sym starts string) result)))))
       (dolist (package internal-packages) 
        (let ((syms (system:package-internal-symbols package)))
           (dotimes (i (length syms))
@@ -98,12 +110,12 @@ TARGET in the SOURCE. Otherwise return NIL."
               (when (symbolp sym)
                 (let ((string (prin1-to-string sym)))
                   (when-let (starts (flex-complete-fuzzy-search str string))
-                    (push (list sym starts string) result)))))))))
+                    (vector-push-extend (list sym starts string) result)))))))))
     ;; Sort symbols according to the "density" of matched characters -
     ;; more the matched characters grouped together, more it is
     ;; preferred. The start position of the first match is also count.
-    ;; If they're same, then rank two symbols by the length of their
-    ;; string representation.
+    ;; If they're same, then rank two symbols using length & string<
+    ;; of their string representation.
     (sort result
           #'(lambda (list1 list2)
               (destructuring-bind (starts1 string1) list1
@@ -115,10 +127,21 @@ TARGET in the SOURCE. Otherwise return NIL."
                                   for i in starts2
                                   sum (- i j))))
                     (if (= n1 n2)
-                      (< (length string1) (length string2))
+                      (let ((len1 (length string1))
+                            (len2 (length string2)))
+                        (if (= len1 len2)
+                          (string< string1 string2)
+                          (< len1 len2)))
                       (< n1 n2))))))
           :key #'cdr)
-    (mapcar #'first (subseq result 0 (min *max-complete-items* (length result))))))
+    ;; There may be some duplicate symbols during previous search, but
+    ;; checking duplicate in a large vector is expensive, so we move
+    ;; it here.
+    (let ((final (delete-duplicates
+                  (map 'list #'first (subseq result 0 (min *max-complete-items* (length result)))))))
+      ;; Set cache
+      (setq *flex-complete-prev-match* (cons str final))
+      final)))
 
 (defun flex-complete-symbol-completion-string-to-insert (res string package-and-case)
   "Modified version of SYMBOL-COMPLETION-STRING-TO-INSERT that
@@ -164,7 +187,7 @@ fuzzy package-name completion."
      "Flexible in-place symbol completion with fuzzy searching, similar with Sly."
   (declare (ignore p))
   (let ((package (buffer-package-to-use (current-point))))
-    (editor:complete-in-place
+    (complete-in-place
      'flex-complete-func
      :extract-func #'(lambda (point)
                        (let ((string (editor::read-symbol-from-point
@@ -180,18 +203,18 @@ fuzzy package-name completion."
                            (let ((*package* package)
                                  (*print-case* *default-completion-case*))
                              (format nil "[~C~C~C] ~A"
-                                     (or (and (find-class x nil) (code-char 65315))
-                                         (and (ignore-errors (subtypep x t)) (code-char 65332))
-                                         (and (find-package x) (code-char 65328))
-                                         #\Ideographic-Space)
-                                     (or (and (macro-function x) (code-char 65325))
-                                         (and (fboundp x)
-                                              (if (typep (symbol-function x) 'generic-function)
-                                                (code-char 65319) (code-char 65318)))
-                                         #\Ideographic-Space)
-                                     (or (and (boundp x) (code-char 65334))
-                                         (and (symbol-plist x) (code-char 65324))
-                                         #\Ideographic-Space)
+                                     (cond ((find-class x nil) (code-char 65315))
+                                           ((ignore-errors (subtypep x t)) (code-char 65332))
+                                           ((find-package x) (code-char 65328))
+                                           (t #\Ideographic-Space))
+                                     (cond ((macro-function x) (code-char 65325))
+                                           ((fboundp x)
+                                            (if (typep (symbol-function x) 'generic-function)
+                                              (code-char 65319) (code-char 65318)))
+                                           (t #\Ideographic-Space))
+                                     (cond ((boundp x) (code-char 65334))
+                                           ((symbol-plist x) (code-char 65324))
+                                           (t #\Ideographic-Space))
                                      (prin1-to-string x))))
                        (lambda (x)
                          (let ((*package* package)
@@ -222,7 +245,7 @@ fuzzy package-name completion."
      "Select next in-place completion item."
      "Select next in-place completion item."
   (loop repeat (or p 1)
-        do (pass-gesture-to-non-focus-completer 
+        do (pass-gesture-to-non-focus-completer
             (window-text-pane (current-window))
             :down)))
 
@@ -230,7 +253,7 @@ fuzzy package-name completion."
      "Select previous in-place completion item."
      "Select previous in-place completion item."
   (loop repeat (or p 1)
-        do (pass-gesture-to-non-focus-completer 
+        do (pass-gesture-to-non-focus-completer
             (window-text-pane (current-window))
             :up)))
 
