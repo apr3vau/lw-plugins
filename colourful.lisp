@@ -102,19 +102,49 @@
 
 (defun fontify-single-form (start end)
   (editor:with-point ((point start))
-    (loop for attr = (editor:character-attribute :lisp-syntax (editor:character-at point 0))
+    (loop for char = (editor:character-at point 0)
+          for attr = (editor:character-attribute :lisp-syntax char)
           do (case attr
-               (:prefix t)
+               (:prefix)
                (:open-paren
                 (editor::font-lock-apply-highlight start point 'special-operator-face)
                 (fontify-list point end)
                 (return))
                (:constituent
-                (editor::font-lock-apply-highlight start point 'special-operator-face)
-                (fontify-symbol point end)
-                (return))
+                (unless (eql char #\@)
+                  (editor::font-lock-apply-highlight start point 'special-operator-face)
+                  (fontify-symbol point end)
+                  (return)))
                (t (return)))
           do (editor::point-after point))))
+
+(defun fontify-loop (lst)
+  (let ((1st (pop lst)))
+    (editor::font-lock-apply-highlight
+     (first 1st) (second 1st)
+     'macro-face))
+  (dolist (form lst)
+    (let* ((start (first form))
+           (end (second form))
+           (str (editor:points-to-string start end)))
+      (if (member str '("named"
+                        "initially" "finally" "for" "as" "with"
+                        "do" "collect" "collecting" "append"
+                        "appending" "nconc" "nconcing" "into" "count"
+                        "counting" "sum" "summing" "maximize" "return" "loop-finish"
+                        "maximizing" "minimize" "minimizing" "doing"
+                        "thereis" "always" "never" "if" "when"
+                        "unless" "repeat" "while" "until"
+                        "=" "and" "it" "else" "end" "from" "upfrom"
+                        "above" "below" "to" "upto" "downto" "downfrom"
+                        "in" "on" "then" "across" "being" "each" "the" "hash-key"
+                        "hash-keys" "of" "using" "hash-value" "hash-values"
+                        "symbol" "symbols" "present-symbol"
+                        "present-symbols" "external-symbol"
+                        "external-symbols" "fixnum" "float" "of-type")
+                  :test #'string-equal)
+        (editor::font-lock-apply-highlight start end 'builtin-face)
+        (fontify-single-form start end)))))
 
 (defun fontify-declaration-list (lst)
   (let ((1st (pop lst)))
@@ -126,7 +156,7 @@
           (end (second form)))
       (let ((attr (loop for c = (editor:character-at start 0)
                         for attr = (editor:character-attribute :lisp-syntax c)
-                        until (not (eq attr :prefix))
+                        while (eq attr :prefix)
                         do (editor::point-after start)
                         finally (return attr))))
         (when (eq attr :open-paren)
@@ -158,6 +188,8 @@
                        '("declare" "proclaim" "declaim")
                        :test #'string-equal)
                (fontify-declaration-list forms))
+              ((string-equal "loop" (apply #'editor:points-to-string (first forms)))
+               (fontify-loop forms))
               (t (dolist (l forms) (apply #'fontify-single-form l))))))))
 
 ;; Main Function
