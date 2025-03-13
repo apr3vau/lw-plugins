@@ -55,6 +55,24 @@
   (loop for sym being each present-symbol of (find-package "CL")
         when (special-operator-p sym) collect sym))
 
+(defvar *loop-keywords-names*
+  '("named"
+    "initially" "finally" "for" "as" "with"
+    "do" "collect" "collecting" "append"
+    "appending" "nconc" "nconcing" "into" "count"
+    "counting" "sum" "summing" "maximize" "return" "loop-finish"
+    "maximizing" "minimize" "minimizing" "doing"
+    "thereis" "always" "never" "if" "when"
+    "unless" "repeat" "while" "until"
+    "=" "and" "it" "else" "end" "from" "upfrom"
+    "above" "below" "to" "upto" "downto" "downfrom"
+    "in" "on" "then" "across" "being" "each" "the" "hash-key"
+    "hash-keys" "of" "using" "hash-value" "hash-values"
+    "symbol" "symbols" "present-symbol"
+    "present-symbols" "external-symbol"
+    "external-symbols" "fixnum" "float" "of-type")
+  "Loop keywords from https://lispcookbook.github.io/cl-cookbook/iteration.html#appendix-list-of-loop-keywords")
+
 ;; Fontifying
 
 (defun fontify-symbol (start end)
@@ -101,6 +119,12 @@
           (when face (editor::font-lock-apply-highlight start end face)))))))
 
 (defun fontify-single-form (start end)
+  "Fontify a single form, can be a symbol or a list, with prefix
+(reader macro) characters.
+
+This function is used to separate prefix & form, colouring prefix
+characters, sending rest of the form to fontify-list or
+fontify-symbol."
   (editor:with-point ((point start))
     (loop for char = (editor:character-at point 0)
           for attr = (editor:character-attribute :lisp-syntax char)
@@ -111,6 +135,8 @@
                 (fontify-list point end)
                 (return))
                (:constituent
+                ;; The default lisp-syntax counts #\@ as constituent instead of prefix,
+                ;; so we need to take additional consideration
                 (unless (eql char #\@)
                   (editor::font-lock-apply-highlight start point 'special-operator-face)
                   (fontify-symbol point end)
@@ -119,6 +145,7 @@
           do (editor::point-after point))))
 
 (defun fontify-loop (lst)
+  "Highlight loop keywords"
   (let ((1st (pop lst)))
     (editor::font-lock-apply-highlight
      (first 1st) (second 1st)
@@ -127,26 +154,12 @@
     (let* ((start (first form))
            (end (second form))
            (str (editor:points-to-string start end)))
-      (if (member str '("named"
-                        "initially" "finally" "for" "as" "with"
-                        "do" "collect" "collecting" "append"
-                        "appending" "nconc" "nconcing" "into" "count"
-                        "counting" "sum" "summing" "maximize" "return" "loop-finish"
-                        "maximizing" "minimize" "minimizing" "doing"
-                        "thereis" "always" "never" "if" "when"
-                        "unless" "repeat" "while" "until"
-                        "=" "and" "it" "else" "end" "from" "upfrom"
-                        "above" "below" "to" "upto" "downto" "downfrom"
-                        "in" "on" "then" "across" "being" "each" "the" "hash-key"
-                        "hash-keys" "of" "using" "hash-value" "hash-values"
-                        "symbol" "symbols" "present-symbol"
-                        "present-symbols" "external-symbol"
-                        "external-symbols" "fixnum" "float" "of-type")
-                  :test #'string-equal)
+      (if (member str *loop-keywords-names* :test #'string-equal)
         (editor::font-lock-apply-highlight start end 'builtin-face)
         (fontify-single-form start end)))))
 
 (defun fontify-declaration-list (lst)
+  ;; FIXME: buggy?
   (let ((1st (pop lst)))
     (editor::font-lock-apply-highlight
      (first 1st) (second 1st)
@@ -172,11 +185,14 @@
               (when children (fontify-declaration-list children)))))))))
 
 (defun fontify-list (start &optional end)
+  "Parse items inside the list, sends them to corresponding fontify
+functions."
   (declare (ignore end))
   (editor:with-point ((form-start start)
                       (form-end start))
     (editor:form-offset form-start 1 t -1)
     (editor:move-point form-end form-start)
+    ;; Collect sub forms inside the list
     (let ((forms (loop do (unless (editor:form-offset form-end 1 t 0)
                             (loop-finish))
                           (editor:move-point form-start form-end)
@@ -184,26 +200,40 @@
                        collect (list (editor:copy-point form-start :temporary)
                                      (editor:copy-point form-end :temporary)))))
       (when forms
-        (cond ((member (apply #'editor:points-to-string (first forms))
-                       '("declare" "proclaim" "declaim")
-                       :test #'string-equal)
-               (fontify-declaration-list forms))
-              ((string-equal "loop" (apply #'editor:points-to-string (first forms)))
-               (fontify-loop forms))
-              (t (dolist (l forms) (apply #'fontify-single-form l))))))))
+        (let ((1st (apply #'editor:points-to-string (first forms))))
+          ;; We can add conditions here, to apply custom fontify
+          ;; function for specific clause
+          (cond ((member 1st '("declare" "proclaim" "declaim")
+                         :test #'string-equal)
+                 (fontify-declaration-list forms))
+                ((string-equal 1st "loop")
+                 (fontify-loop forms))
+                (t (dolist (l forms) (apply #'fontify-single-form l)))))))))
 
 ;; Main Function
 
 (defun fontify-keywords-region (start end)
+  "Set the font-lock-fontify-keywords-region-function to this function
+to enable colourful mode."
   (editor:with-buffer-locked ((editor:point-buffer start) :for-modification nil)
-    (editor::with-point ((form-start start)
-                         (form-end start))
-      (loop (unless (editor:form-offset form-end 1 t 0)
-              (return))
-            (editor:move-point form-start form-end)
-            (editor:form-offset form-start -1 t 0)
-            (fontify-single-form form-start form-end)
-            (when (editor:point> form-end end) (return))))))
+    (editor:with-point ((form-start end))
+      (loop while (editor:form-offset form-start -1 t 1)
+            until (editor:point< form-start start))
+      (if (editor:point< form-start start)
+        ;; If the region is inside one form
+        (editor:with-point ((form-end form-start))
+          (editor:form-offset form-end 1)
+          (fontify-single-form form-start form-end))
+        ;; If the region has crossed the top-level
+        (progn
+          (editor:move-point form-start start)
+          (loop while (editor:form-offset form-start -1 t 1))
+          (editor:with-point ((form-end form-start))
+            (loop while (editor:form-offset form-end 1)
+                  do (editor:move-point form-start form-end)
+                     (editor:form-offset form-start -1)
+                     (fontify-single-form form-start form-end)
+                  until (editor:point> form-end end))))))))
 
 (export 'fontify-keywords-region)
 
@@ -231,4 +261,4 @@ toggle the mode when `p' is nil."
 
 (editor:add-global-hook editor:lisp-mode-hook 'enable-colourful-mode)
 
-(export '(*builtin-symbols* colourful-mode-command enable-colourful-mode))
+(export '(*special-operators* *loop-keywords-names* colourful-mode-command enable-colourful-mode))
