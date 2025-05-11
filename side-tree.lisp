@@ -36,25 +36,6 @@
 (defvar *windows-plist* nil
   "A plist of editor pane -> side tree window.")
 
-;; Used for Lisp imenu
-(defvar *lisp-functions-symbols*
-  '(defun defadvice))
-(defvar *lisp-methods-symbols*
-  '(defgeneric defmethod))
-(defvar *lisp-variables-symbols*
-  '(defvar defparameter defconstant define-editor-variable fli:define-foreign-variable))
-(defvar *lisp-types-symbols*
-  '(deftype defstruct defclass defpackage defmode define-condition))
-(defvar *lisp-macros-symbols*
-  '(defmacro define-symbol-macro define-compiler-macro define-modify-macro
-     defsetf define-setf-expander))
-(defvar *capi-symbols*
-  '(capi:define-interface capi:define-layout capi:define-menu capi:define-command))
-(defvar *editor-commands-symbols*
-  '(defcommand))
-(defvar *styles-symbols*
-  '(color:define-color-alias make-face))
-
 ;; Types
 
 (defstruct workspace name (projects nil))
@@ -246,7 +227,7 @@ ignored (not displayed) in Side Tree.")
                             "$RECYCLE.BIN")
                  :test #'equal)))))
 
-(defgeneric get-icon (kind path)
+(defgeneric get-icon (kind &key &allow-other-keys)
   (:documentation "Get an icon for Side Tree.
 
 This function should return two values, the first value is an icon
@@ -261,34 +242,45 @@ Possible values of KIND are:
 - Other values that may appeared as the KIND property of the entry.
 
 PATH is the truename of the entry.")
-  (:method (kind path))
-  (:method ((kind (eql :right-pointer)) path)
+  (:method (kind &key &allow-other-keys))
+  (:method ((kind (eql :right-pointer)) &key &allow-other-keys)
    (values (code-char 9654) nil))
-  (:method ((kind (eql :down-pointer)) path)
+  (:method ((kind (eql :down-pointer)) &key &allow-other-keys)
    (values (code-char 9660) nil))
-  (:method ((kind (eql :project)) path)
+  (:method ((kind (eql :project)) &key &allow-other-keys)
    (values (code-char 128218) nil))
-  (:method ((kind (eql :directory)) path)
+  (:method ((kind (eql :directory)) &key &allow-other-keys)
    (values (code-char 128193) nil))
-  (:method ((kind (eql :directory-opened)) path)
+  (:method ((kind (eql :directory-opened)) &key &allow-other-keys)
    (values (code-char 128194) nil))
-  (:method ((kind (eql :file)) path)
-   (if (member (pathname-type path) '("lisp" "lsp" "lispworks")
+  (:method ((kind (eql :file)) &key truename &allow-other-keys)
+   (if (member (pathname-type truename) '("lisp" "lsp" "lispworks")
                :test #'equal)
      (values (code-char 128221) nil)
-     (values (code-char 128196) nil))))
+     (values (code-char 128196) nil)))
+  (:method ((kind (eql :lisp-definition)) &key dspec &allow-other-keys)
+   (case (dspec:dspec-class dspec)
+     ((or package defpackage) (code-char 65328))
+     ((or function defun) (code-char 65318))
+     (defgeneric (code-char 65319))
+     ((or variable defvar defparameter defconstant define-symbol-macro) (code-char 65334))
+     ((or method method-combination defmethod defmacro) (code-char 65319))
+     ((or type deftype) (code-char 65332))
+     ((or defclass capi:define-interface capi:define-layout define-condition) (code-char 65315))
+     ((or structure defstruct structure-class defsystem) (code-char 65331))
+     ((or defcommand define-editor-variable) (code-char 65317))
+     (t #\Ideographic-Space))))
 
 (defun switch-expand-state (point)
   (let* ((pos         (point-position point))
-         (truename    (get-text-property point :truename))
          (expanded-p  (not (get-text-property point :expanded-p)))
          (old-pointer (if expanded-p
-                        (get-icon :right-pointer truename)
-                        (get-icon :down-pointer truename))))
+                        (get-icon :right-pointer)
+                        (get-icon :down-pointer))))
     (multiple-value-bind (new-pointer new-props)
         (if expanded-p
-          (get-icon :down-pointer truename)
-          (get-icon :right-pointer truename))
+          (get-icon :down-pointer)
+          (get-icon :right-pointer))
       (with-point ((point point)
                    (end point))
         (line-start point)
@@ -318,6 +310,16 @@ PATH is the truename of the entry.")
       (insert-directory-content point (1+ level) project truename))
     (setf (point-position point) pos)))
 
+(defun buffer-dspecs-safe (buffer)
+  (let ((package (editor::buffer-package-to-use (buffers-start buffer))))
+    (let ((syms (loop for sym across (system:package-internal-symbols package)
+                      when (symbolp sym) collect sym)))
+      (prog1 (buffer-dspecs buffer)
+        (loop for sym across (system:package-internal-symbols package)
+              when (symbolp sym)
+                unless (find sym syms)
+                  do (unintern sym package))))))
+
 (defgeneric expand (point kind)
   (:documentation "Expand the entry at POINT.
 KIND is the KIND property of the entry.")
@@ -335,63 +337,24 @@ KIND is the KIND property of the entry.")
        (switch-expand-state point)
        (with-point ((point point))
          (line-offset point 1 0)
-         (with-open-file (in truename)
-           (handler-case
-               (loop for i from 1
-                     for form = (read in nil 'eof)
-                     for car = (when (consp form) (car form))
-                     until (eq form 'eof)
-                     when car
-                       if (member car *lisp-functions-symbols*)
-                         collect (list i (second form)) into functions
-                       else if (member car *lisp-methods-symbols*)
-                              collect (list i (second form)) into methods
-                         else if (member car *lisp-variables-symbols*)
-                                collect (list i (second form)) into variables
-                              else if (member car *lisp-types-symbols*)
-                                     collect (list i (second form)) into types
-                                else if (member car *lisp-macros-symbols*)
-                                       collect (list i (second form)) into macros
-                                     else if (member car *capi-symbols*)
-                                            collect (list i (second form)) into capi
-                                       else if (member car *editor-commands-symbols*)
-                                              collect (list i (second form)) into editor-commands
-                                            else if (member car *styles-symbols*)
-                                                   collect (list i (second form)) into styles
-                     finally
-                       (flet ((insert (name forms)
-                                (declare (inline insert))
-                                (editor::insert-buffer-string
-                                 point (make-entry-string
-                                        name 'tag-name-face t
-                                        :kind :lisp-imenu
-                                        :truename truename :level (1+ level) :project project :expanded-p nil :forms forms))))
-                         (when functions       (insert "Functions"       functions))
-                         (when methods         (insert "Methods"         methods))
-                         (when variables       (insert "Variables"       variables))
-                         (when types           (insert "Types"           types))
-                         (when macros          (insert "Macros"          macros))
-                         (when capi            (insert "CAPI"            capi))
-                         (when editor-commands (insert "Editor Commands" editor-commands))
-                         (when styles          (insert "Styles"          styles))))
-             (error (e))))))))
-  (:method (point (kind (eql :lisp-imenu)))
-   (switch-expand-state point)
-   (let* ((props    (text-properties-at point))
-          (level    (getf props :level))
-          (project  (getf props :project))
-          (truename (getf props :truename))
-          (forms    (getf props :forms)))
-     (with-point ((point point)
-                  (end point))
-       (line-offset point 1 0)
-       (loop for (index form) in forms
-             for name = (if (consp form) (car form) form)
-             do (editor::insert-buffer-string
-                 point (make-entry-string
-                        (string-downcase name) 'tag-name-face nil
-                        :kind :lisp-definition
-                        :truename truename :level (1+ level) :project project :index index)))))))
+         (multiple-value-bind (buf newp)
+             (find-file-buffer truename)
+           (let ((dspecs (buffer-dspecs buf)))
+             (dolist (dspec dspecs)
+               (when-let (dspec (dspec:canonicalize-dspec dspec))
+                 (let ((name (dspec:dspec-name dspec)))
+                   (typecase name
+                     (symbol (setq name (string-downcase name)))
+                     (cons (let ((str (string-downcase (princ-to-string name))))
+                             (setq name (subseq str 1 (1- (length str))))))
+                     (t name))
+                   (editor::insert-buffer-string
+                    point (make-entry-string
+                           name 'tag-name-face nil
+                           :kind :lisp-definition
+                           :truename truename :level (1+ level) :project project :dspec dspec))))))
+           (when newp (editor::delete-buffer buf)))
+         )))))
 
 (defgeneric collapse (point kind)
   (:documentation "Collapse the entry at POINT.
@@ -440,14 +403,15 @@ KIND is the KIND property of the entry.")
      (collapse point :project)
      (expand point :project)))
   (:method (point (kind (eql :lisp-definition)))
-   (let* ((index     (get-text-property point :index))
-          (buffer    (find-file-buffer (get-text-property point :truename)))
-          (new-point (buffer-point buffer))
+   (let* ((dspec  (get-text-property point :dspec))
+          (buffer (find-file-buffer (get-text-property point :truename)))
+          (point  (buffer-point buffer))
           (editor::*windows-not-to-use* (list (current-window))))
-     (buffer-start new-point)
-     (form-offset new-point index)
-     (set-current-mark new-point)
-     (form-offset new-point -1)
+     (buffer-start point)
+     (find-dspec-in-buffer dspec buffer point)
+     (form-offset point 1)
+     (set-current-mark point)
+     (form-offset point -1)
      (editor::set-highlight-buffer-region t buffer)
      (goto-buffer buffer nil nil 10))))
 
@@ -455,12 +419,12 @@ KIND is the KIND property of the entry.")
 
 ;; Formatting
 
-(defun make-entry-string (name face has-pointer-p &rest keys &key kind truename level expanded-p &allow-other-keys)
+(defun make-entry-string (name face has-pointer-p &rest keys &key kind level expanded-p &allow-other-keys)
   (let ((space-len (* 2 level)))
     (multiple-value-bind (pointer pointer-props)
-        (get-icon (if expanded-p :down-pointer :right-pointer) truename)
+        (apply #'get-icon (if expanded-p :down-pointer :right-pointer) keys)
       (multiple-value-bind (icon icon-props)
-          (get-icon kind truename)
+          (apply #'get-icon kind keys)
         (if icon
           (if has-pointer-p
             (editor::make-buffer-string
@@ -610,6 +574,9 @@ KIND is the KIND property of the entry.")
            (side-window (capi:editor-window
                          (lw-tools::editor-pane-wrapper-pane
                           (car (capi:layout-description row-layout))))))
+      #+lispworks8.1
+      (when (editor::window-display-line-numbers-p side-window)
+        (editor::ed-toggle-show-line-numbers (window-text-pane side-window)))
       (capi:apply-in-pane-process
        pane
        (lambda ()
@@ -618,6 +585,76 @@ KIND is the KIND property of the entry.")
          (setf (capi:editor-pane-wrap-style (window-text-pane side-window)) nil)))
       (setf (getf *windows-plist* pane) side-window)
       side-window)))
+
+;; Auto navigate
+
+(defun auto-navigate-for-window (window)
+  (let* ((pane (window-text-pane window))
+         (buf (window-buffer window))
+         (file (buffer-pathname buf))
+         (side-window (getf *windows-plist* pane)))
+    (with-point ((p1 (buffer-point buf))
+                 (p2 (buffer-point buf)))
+      (line-start p1)
+      (when (and file side-window (editor::window-alive-p side-window)
+                 (form-offset p1 -1 t 1)
+                 (form-offset p2 -3))
+        (let* ((buffer (window-buffer side-window))
+               (pt (buffer-point buffer))
+               (dspec (editor::parse-dspec :point (buffer-point buf))))
+          (unless (equal (get-text-property pt :dspec) dspec)
+            (with-buffer-writable buffer
+              (block nav
+                (if (equal (get-text-property pt :truename) file)
+                  (loop until (eq (get-text-property pt :kind) :file)
+                        unless (valid-entry-offset pt -1)
+                          do (return-from nav))
+                  (with-point ((point (buffers-start buffer)))
+                    (loop while (valid-entry-offset point 1)
+                          when (and (entry-expanded-p point)
+                                    (eq (get-text-property point :kind) :file))
+                            do (collapse point :file))
+                    (buffer-start point)
+                    (loop for path = (get-text-property point :truename)
+                          for dir = (when path (pathname-directory path))
+                          until (equal file path)
+                          when (and dir
+                                    (member (get-text-property point :kind)
+                                            '(:project :directory :directory-opened))
+                                    (>= (length (pathname-directory file))
+                                        (length dir))
+                                    (equal dir (subseq (pathname-directory file) 0 (length dir))))
+                            do (unless (entry-expanded-p point)
+                                 (expand point (get-text-property point :kind)))
+                          unless (valid-entry-offset point 1)
+                            do (return-from nav)
+                          finally (move-point pt point))))
+                (unless (entry-expanded-p pt)
+                  (expand pt (get-text-property pt :kind)))
+                (with-point ((point pt))
+                  (let (tried)
+                    (tagbody
+                     start
+                     (loop until (dspec:dspec-equal (get-text-property point :dspec) dspec)
+                           unless (valid-entry-offset point 1)
+                             do (go try-again))
+                     (move-point pt point)
+                     (editor::update-buffer-window side-window)
+                     ;; Integration for highlight current line
+                     (when (buffer-minor-mode buffer "Highlight Current Line")
+                       (funcall (intern "HIGHLIGHT-CURRENT-LINE" "EDITOR") buffer))
+                     (return-from nav)
+                   
+                     try-again
+                     (if (and (null tried) (entry-expanded-p pt))
+                       (progn
+                         (collapse pt (get-text-property pt :kind))
+                         (expand pt (get-text-property pt :kind))
+                         (setq tried t)
+                         (go start))
+                       (return-from nav)))))))))))))
+
+(add-global-hook editor::after-redisplay-hook 'auto-navigate-for-window)
 
 ;; Main commands
 
@@ -1167,3 +1204,13 @@ If there's no Side Tree in current editor, open a new one."
 
 ;; Recommend binding
 (bind-key "Side Tree Select Window" "M-0")
+
+;; Highlight Current Line integration
+
+(defun enable-highlight-current-line-if-applicable (buffer &rest args)
+  (declare (ignore args))
+  (when-let (hl-line (find-symbol "ENABLE-HIGHLIGHT-CURRENT-LINE-MODE" "EDITOR"))
+    (when (fboundp hl-line)
+      (funcall hl-line buffer))))
+
+(add-global-hook editor::side-tree-mode-hook 'enable-highlight-current-line-if-applicable)
