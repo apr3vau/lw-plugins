@@ -128,8 +128,7 @@ form, upper string, or the whole buffer."
       (form-offset end 1)
       (go end)
       end
-      (values start end)))
-)
+      (values start end))))
 
 (defcommand "Expand Region" (p)
      "Expand the marking region.
