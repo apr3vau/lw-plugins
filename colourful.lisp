@@ -73,7 +73,7 @@
     "counting" "sum" "summing" "maximize" "return" "loop-finish"
     "maximizing" "minimize" "minimizing" "doing"
     "thereis" "always" "never" "if" "when"
-    "unless" "repeat" "while" "until"
+    "unless" "repeat" "while" "until" "by"
     "=" "and" "it" "else" "end" "from" "upfrom"
     "above" "below" "to" "upto" "downto" "downfrom"
     "in" "on" "then" "across" "being" "each" "the" "hash-key"
@@ -81,7 +81,9 @@
     "symbol" "symbols" "present-symbol"
     "present-symbols" "external-symbol"
     "external-symbols" "fixnum" "float" "of-type")
-  "Loop keywords from https://lispcookbook.github.io/cl-cookbook/iteration.html#appendix-list-of-loop-keywords")
+  "Loop keywords from https://lispcookbook.github.io/cl-cookbook/iteration.html#appendix-list-of-loop-keywords
+
+...But why there isn't `by'?")
 
 ;; Utils
 
