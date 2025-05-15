@@ -15,6 +15,12 @@
 
 (defpackage colourful
   (:use editor)
+  (:import-from editor
+   #:previous-character
+   #:next-character
+   #:point-before
+   #:point-after
+   #:create-dark-background-switchable-color)
   (:add-use-defaults))
 (in-package "COLOURFUL")
 
@@ -28,27 +34,27 @@
            :if-exists :overwrite
            :documentation "Face for declarations, e.g. DECLARE, OPTIMIZE, IGNORE, INLINE, etc.")
 (make-face 'special-operator-face
-           :foreground (editor::create-dark-background-switchable-color :turquoise4 :darkslategray2)
+           :foreground (create-dark-background-switchable-color :turquoise4 :darkslategray2)
            :bold-p t
            :if-exists :overwrite)
 (make-face 'function-face
-           :foreground (editor::create-dark-background-switchable-color :blue3 :lightblue)
+           :foreground (create-dark-background-switchable-color :blue3 :lightblue)
            :if-exists :overwrite)
 (make-face 'macro-face
-           :foreground (editor::create-dark-background-switchable-color :slateblue3 :darkolivegreen2)
+           :foreground (create-dark-background-switchable-color :slateblue3 :darkolivegreen2)
            :if-exists :overwrite)
 (make-face 'type-face
-           :foreground (editor::create-dark-background-switchable-color :forestgreen :burlywood2)
+           :foreground (create-dark-background-switchable-color :forestgreen :burlywood2)
            :if-exists :overwrite)
 (make-face 'builtin-face
            :italic-p t
-           :foreground (editor::create-dark-background-switchable-color :orchid :pink)
+           :foreground (create-dark-background-switchable-color :orchid :pink)
            :if-exists :overwrite)
 (make-face 'dynamic-variable-face
-           :foreground (editor::create-dark-background-switchable-color :darkgoldenrod :lightgoldenrod)
+           :foreground (create-dark-background-switchable-color :darkgoldenrod :lightgoldenrod)
            :if-exists :overwrite)
 (make-face 'variable-name-face
-           :foreground (editor::create-dark-background-switchable-color :aquamarine4 :aquamarine2)
+           :foreground (create-dark-background-switchable-color :aquamarine4 :aquamarine2)
            :if-exists :overwrite)
 
 (export '(declaration-face builtin-face type-face function-face macro-face special-operator-face variable-face))
@@ -129,11 +135,20 @@
                      t))
         while (editor::point-after point)))
 
-(defun skip-prefix (start)
-  (loop for attr = (character-attribute :lisp-syntax (character-at start 0))
-        while (eq attr :prefix)
-        do (editor::point-after start))
-  start)
+(defun skip-chars-forward (point predicate)
+  (loop while (funcall predicate (next-character point))
+        unless (editor::point-after point)
+          do (return nil)
+        finally (return point)))
+
+(defun skip-prefix (point)
+  (declare (inline skip-prefix))
+  ;; The default lisp-syntax counts #\@ as constituent instead of prefix,
+  ;; so we need to take additional consideration
+  (skip-chars-forward
+   point (lambda (char)
+           (or (eq (character-attribute :lisp-syntax char) :prefix)
+               (char= char #\@)))))
 
 ;; Fontifying
 
@@ -189,15 +204,8 @@ This function is used to separate prefix & form, colouring prefix
 characters, sending rest of the form to fontify-list or
 fontify-symbol."
   (with-point ((point start))
-    (when-let
-        (attr (loop for char = (character-at point 0)
-                    for attr = (character-attribute :lisp-syntax char)
-                    while (or (eq attr :prefix)
-                              ;; The default lisp-syntax counts #\@ as constituent instead of prefix,
-                              ;; so we need to take additional consideration
-                              (eql char #\@))
-                    do (editor::point-after point)
-                    finally (return attr)))
+    (when-let* ((point (skip-prefix point))
+                (attr (character-attribute :lisp-syntax (next-character point))))
       (case attr
         (:open-paren
          (apply-highlight start point 'special-operator-face)
@@ -219,21 +227,19 @@ fontify-symbol."
         (fontify-single-form start end)))))
 
 (defun fontify-declaration-list (lst)
-  ;; FIXME: buggy?
-  (let ((1st (pop lst)))
-    (apply-highlight (first 1st) (second 1st) 'declaration-face))
+  (destructuring-bind (start end) (pop lst)
+    (with-point ((prefix-end start))
+      (skip-prefix prefix-end)
+      (apply-highlight start prefix-end 'special-operator-face)
+      (apply-highlight prefix-end end 'declaration-face)))
   (dolist (form lst)
     (let* ((start (first form))
-           (attr (loop for c = (character-at start 0)
-                       for attr = (character-attribute :lisp-syntax c)
-                       while (eq attr :prefix)
-                       do (editor::point-after start)
-                       finally (return attr))))
-      (when (eq attr :open-paren)
-        (progn
-          (form-offset start 1 t -1)
-          (let ((children (collect-forms start)))
-            (when children (fontify-declaration-list children))))))))
+           (point (skip-prefix (copy-point start :temporary))))
+      (apply-highlight start point 'special-operator-face)
+      (when (eql (next-character point) #\( )
+        (form-offset point 1 t -1)
+        (let ((children (collect-forms point)))
+          (when children (fontify-declaration-list children)))))))
 
 (defun fontify-let (lst)
   "Highlight `let' form, or something behave like `let'."
@@ -246,7 +252,7 @@ fontify-symbol."
         (with-point ((prefix-end start))
           (skip-prefix prefix-end)
           (apply-highlight start prefix-end 'special-operator-face)
-          (if (eql (character-at prefix-end 0) #\()
+          (if (eql (next-character prefix-end) #\()
 	    (when-let (sub (form-offset prefix-end 1 t -1))
 	      (when-let (children (collect-forms sub))
 		(if (or (member 1st '("dolist" "cl-dolist" "dotimes" "cl-dotimes"
@@ -256,23 +262,22 @@ fontify-symbol."
                                      :test #'string-equal)
                              (with-point ((pt (caar children)))
                                (skip-prefix pt)
-                               (not (eql (character-at pt 0) #\( )))))
-                  (destructuring-bind (start end) (car children)
+                               (not (eql (next-character pt) #\( )))))
+                  (destructuring-bind (start end) (first children)
                     (apply-highlight start end 'variable-name-face)
-                    (dolist (c (cdr children))
+                    (dolist (c (rest children))
                       (apply #'fontify-single-form c)))
 		  (dolist (child children)
 		    (destructuring-bind (start end) child
                       (with-point ((prefix-end start))
                         (skip-prefix prefix-end)
                         (apply-highlight start prefix-end 'special-operator-face)
-                        (if (eql (character-at prefix-end 0) #\()
+                        (if (eql (next-character prefix-end) #\()
                           (when-let (sub (form-offset prefix-end 1 t -1))
                             (when-let (children (collect-forms sub))
-                              (destructuring-bind (start end)
-                                  (car children)
+                              (destructuring-bind (start end) (first children)
                                 (apply-highlight start end 'variable-name-face))
-                              (dolist (c (cdr children))
+                              (dolist (c (rest children))
                                 (apply #'fontify-single-form c))))
                           (apply-highlight prefix-end end 'variable-name-face))))))))
             (fontify-symbol prefix-end end)))
@@ -291,7 +296,7 @@ expresion (typically lambda expression)."
       (with-point ((prefix-end start))
         (skip-prefix prefix-end)
         (apply-highlight start prefix-end 'special-operator-face)
-        (if (eql (character-at prefix-end 0) #\()
+        (if (eql (next-character prefix-end) #\()
 	  (when-let (sub (form-offset prefix-end 1 t -1))
 	    (let ((children (collect-forms sub)))
 	      (dolist (child children)
@@ -299,7 +304,7 @@ expresion (typically lambda expression)."
                   (with-point ((prefix-end start))
                     (skip-prefix prefix-end)
                     (apply-highlight start prefix-end 'special-operator-face)
-                    (case (character-at prefix-end 0)
+                    (case (next-character prefix-end)
                       (#\( (fontify-list prefix-end))
                       (#\& (apply-highlight start end 'special-operator-face))
                       (t (apply-highlight start end 'variable-name-face))))
