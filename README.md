@@ -27,13 +27,9 @@ Here we provide:
 
 > 25/02/2025: Yank from kill-ring is now included inside Vertical Prompt.
 
-The plugins are available via [Ultralisp](https://ultralisp.org)
+## Installation
 
-```common-lisp
-(ql:quickload :lw-plugins)
-```
-
-Or you can clone this repo to `~/common-lisp/` and
+You can clone this repo to `~/common-lisp/` and
 
 ```common-lisp
 (require "asdf")
